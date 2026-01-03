@@ -5,6 +5,8 @@ import logging
 import struct
 import time
 
+from cc_controller.haptics.base import BaseHaptics
+
 log = logging.getLogger(__name__)
 
 
@@ -13,7 +15,7 @@ def _crc32_dualsense(data: bytes) -> int:
     return binascii.crc32(bytes([0xA2]) + data) & 0xFFFFFFFF
 
 
-class DualSenseHaptics:
+class DualSenseHaptics(BaseHaptics):
     """Haptic feedback controller for DualSense."""
 
     def __init__(self, hidapi_lib: ctypes.CDLL, device_handle, is_bluetooth: bool):
@@ -34,7 +36,7 @@ class DualSenseHaptics:
         except Exception as e:
             log.debug(f"Haptic error: {e}")
 
-    def rumble(self, right: int, left: int, duration_ms: int = 60) -> None:
+    def rumble(self, left: int, right: int, duration_ms: int = 60) -> None:
         """Send custom rumble with specified motor intensities (0-255)."""
         if not self._handle:
             return
@@ -64,13 +66,12 @@ class DualSenseHaptics:
     def _rumble_bt(self, right: int, left: int) -> None:
         """Send Bluetooth rumble report with CRC."""
         report = bytearray(78)
-        report[0] = 0x31  # BT report ID
-        report[1] = 0x02  # Sequence tag
-        report[2] = 0xFF  # Feature flags 0
-        report[3] = 0xF7  # Feature flags 1
+        report[0] = 0x31
+        report[1] = 0x02
+        report[2] = 0xFF
+        report[3] = 0xF7
         report[4] = right
         report[5] = left
-        # CRC32 in last 4 bytes
         crc = _crc32_dualsense(bytes(report[:-4]))
         report[-4:] = struct.pack("<I", crc)
         self._hidapi.hid_write(self._handle, bytes(report), 78)

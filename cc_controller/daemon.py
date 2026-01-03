@@ -1,10 +1,11 @@
 """Main daemon entry point."""
 import logging
 import signal
+import sys
 from pathlib import Path
 
 from cc_controller.config import load_config
-from cc_controller.controller import DualSenseController
+from cc_controller.detector import detect_controller
 from cc_controller.app_focus import AppFocus
 from cc_controller.mapper import Mapper
 from cc_controller.keyboard import send_keystroke, trigger_wispr
@@ -18,11 +19,13 @@ class CCControllerDaemon:
     def __init__(self, config_path: Path | None = None):
         self._config = load_config(config_path)
         settings = self._config.get("settings", {})
-
-        poll_interval = settings.get("poll_interval_ms", 10)
         cache_ttl = settings.get("app_focus_cache_ttl_ms", 100)
 
-        self._controller = DualSenseController(poll_interval_ms=poll_interval)
+        self._controller = detect_controller()
+        if not self._controller:
+            log.error("No supported controller found")
+            sys.exit(1)
+
         self._app_focus = AppFocus(cache_ttl_ms=cache_ttl)
         self._mapper = Mapper(self._config, self._app_focus)
         self._running = False

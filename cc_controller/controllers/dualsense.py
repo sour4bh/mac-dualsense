@@ -2,10 +2,9 @@
 import ctypes
 import logging
 import subprocess
-import time
-from typing import Callable
 
-from cc_controller.haptics import DualSenseHaptics
+from cc_controller.controllers.base import BaseController
+from cc_controller.haptics.dualsense import DualSenseHaptics
 
 log = logging.getLogger(__name__)
 
@@ -26,6 +25,7 @@ def _is_bluetooth_connected() -> bool:
     except Exception:
         return False
 
+
 # Load hidapi C library
 try:
     _hidapi_c = ctypes.CDLL("/opt/homebrew/lib/libhidapi.dylib")
@@ -36,10 +36,10 @@ try:
     _hidapi_c.hid_close.argtypes = [ctypes.c_void_p]
     _hidapi_c.hid_read_timeout.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_size_t, ctypes.c_int]
     _hidapi_c.hid_read_timeout.restype = ctypes.c_int
-    CTYPES_AVAILABLE = True
+    HIDAPI_AVAILABLE = True
 except Exception as e:
     log.warning(f"Could not load hidapi C library: {e}")
-    CTYPES_AVAILABLE = False
+    HIDAPI_AVAILABLE = False
 
 DPAD_MASK = 0x0F
 DPAD_MAP = {
@@ -78,21 +78,24 @@ BUTTON_BYTE_SPECIAL = {
 }
 
 
-class DualSenseController:
-    """Direct HID communication with DualSense controller."""
+class DualSenseController(BaseController):
+    """DualSense controller implementation."""
 
-    def __init__(self, poll_interval_ms: int = 10):
+    def __init__(self):
         self._device_handle = None
         self._connected = False
         self._is_bluetooth = False
-        self._poll_interval = poll_interval_ms / 1000.0
         self._prev_buttons: set[str] = set()
         self._read_buffer = ctypes.create_string_buffer(78)
         self._haptics: DualSenseHaptics | None = None
 
+    @property
+    def name(self) -> str:
+        return "DualSense"
+
     def connect(self) -> bool:
         """Attempt to connect to DualSense controller."""
-        if not CTYPES_AVAILABLE:
+        if not HIDAPI_AVAILABLE:
             log.error("hidapi C library not available")
             return False
 
@@ -102,7 +105,6 @@ class DualSenseController:
                 log.debug("DualSense not found")
                 return False
 
-            # Detect USB vs Bluetooth via system_profiler (macOS abstracts BT as USB HID)
             self._is_bluetooth = _is_bluetooth_connected()
             conn_type = "Bluetooth" if self._is_bluetooth else "USB"
             log.info(f"DualSense connected via {conn_type}")
@@ -117,7 +119,7 @@ class DualSenseController:
 
     def disconnect(self) -> None:
         """Disconnect from controller."""
-        if self._device_handle and CTYPES_AVAILABLE:
+        if self._device_handle and HIDAPI_AVAILABLE:
             try:
                 _hidapi_c.hid_close(self._device_handle)
             except Exception:
@@ -129,29 +131,16 @@ class DualSenseController:
 
     @property
     def connected(self) -> bool:
-        """Check if controller is connected."""
         return self._connected and self._device_handle is not None
-
-    @property
-    def haptics(self) -> DualSenseHaptics | None:
-        """Get haptics controller."""
-        return self._haptics
 
     def _parse_buttons(self, data: bytes) -> set[str]:
         """Parse button states from HID report."""
         buttons = set()
 
-        # macOS presents Bluetooth DualSense with USB-style HID reports
-        # Always use USB byte offsets for parsing
         if len(data) < 10:
             return buttons
-        dpad_byte = 5
-        face_byte = 5
-        shoulder_byte = 6
-        special_byte = 7
 
-        # D-pad
-        dpad = data[dpad_byte] & DPAD_MASK
+        dpad = data[5] & DPAD_MASK
         dpad_btn = DPAD_MAP.get(dpad)
         if dpad_btn:
             if "up" in dpad_btn:
@@ -163,26 +152,23 @@ class DualSenseController:
             if "right" in dpad_btn:
                 buttons.add("dpad_right")
 
-        # Face buttons
         for mask, name in BUTTON_BYTE_FACE.items():
-            if data[face_byte] & mask:
+            if data[5] & mask:
                 buttons.add(name)
 
-        # Shoulder buttons
         for mask, name in BUTTON_BYTE_SHOULDER.items():
-            if data[shoulder_byte] & mask:
+            if data[6] & mask:
                 buttons.add(name)
 
-        # Special buttons
         for mask, name in BUTTON_BYTE_SPECIAL.items():
-            if data[special_byte] & mask:
+            if data[7] & mask:
                 buttons.add(name)
 
         return buttons
 
     def get_pressed(self) -> list[str]:
-        """Get list of buttons that were just pressed (edge detection)."""
-        if not self.connected or not CTYPES_AVAILABLE:
+        """Get list of buttons just pressed (edge detection)."""
+        if not self.connected or not HIDAPI_AVAILABLE:
             return []
 
         try:
@@ -201,27 +187,6 @@ class DualSenseController:
             log.warning(f"Read error: {e}")
             self._connected = False
             return []
-
-    def poll_loop(self, on_press: Callable[[str], None], running: Callable[[], bool]) -> None:
-        """Main polling loop with auto-reconnect."""
-        reconnect_delay = 2.0
-
-        while running():
-            if not self.connected:
-                if self.connect():
-                    self.trigger_haptic("connect")
-                else:
-                    time.sleep(reconnect_delay)
-                    continue
-
-            try:
-                pressed = self.get_pressed()
-                for btn in pressed:
-                    on_press(btn)
-                time.sleep(self._poll_interval)
-            except Exception as e:
-                log.warning(f"Controller error: {e}")
-                self._connected = False
 
     def trigger_haptic(self, pattern: str) -> None:
         """Trigger haptic feedback pattern."""
