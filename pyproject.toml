@@ -1,0 +1,27 @@
+[project]
+name = "cc-controller"
+version = "0.1.0"
+description = "DualSense controller automation for Warp/Claude Code on macOS"
+requires-python = ">=3.10"
+dependencies = [
+    "pydualsense>=0.7.5",
+    "pyobjc-framework-Quartz>=10.0",
+    "pyobjc-framework-Cocoa>=10.0",
+    "PyYAML>=6.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.4",
+]
+
+[project.scripts]
+cc-controller = "cc_controller.daemon:main"
+
+[tool.setuptools.packages.find]
+include = ["cc_controller*"]
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
