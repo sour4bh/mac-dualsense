@@ -18,6 +18,7 @@ dev = [
 
 [project.scripts]
 cc-controller = "cc_controller.daemon:main"
+cc-controller-ui = "cc_controller.ui.main:main"
 
 [tool.setuptools.packages.find]
 include = ["cc_controller*"]

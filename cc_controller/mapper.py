@@ -19,19 +19,36 @@ class Mapper:
     """Resolve controller buttons to actions based on context."""
 
     def __init__(self, config: dict, app_focus: AppFocus):
-        self._mappings = config.get("mappings", {})
+        self._config = config
         self._app_focus = app_focus
+
+    def _mappings(self) -> dict:
+        """Return the active profile's mappings (with legacy fallback)."""
+        profiles = self._config.get("profiles")
+        if isinstance(profiles, dict):
+            active = profiles.get("active")
+            items = profiles.get("items")
+            if isinstance(active, str) and isinstance(items, dict):
+                profile = items.get(active)
+                if isinstance(profile, dict):
+                    mappings = profile.get("mappings")
+                    if isinstance(mappings, dict):
+                        return mappings
+
+        legacy = self._config.get("mappings")
+        return legacy if isinstance(legacy, dict) else {}
 
     def resolve(self, button: str) -> Action:
         """Resolve button to action based on current app context."""
         context = self._app_focus.get_context()
+        mappings = self._mappings()
 
         # Check context-specific mapping first
         action_def = None
-        if context in self._mappings and button in self._mappings[context]:
-            action_def = self._mappings[context][button]
-        elif "default" in self._mappings and button in self._mappings["default"]:
-            action_def = self._mappings["default"][button]
+        if context in mappings and button in mappings[context]:
+            action_def = mappings[context][button]
+        elif "default" in mappings and button in mappings["default"]:
+            action_def = mappings["default"][button]
 
         if not action_def:
             return Action(type="noop")

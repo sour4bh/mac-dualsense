@@ -18,7 +18,7 @@ try:
     _hidapi_c.hid_write.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_size_t]
     _hidapi_c.hid_write.restype = ctypes.c_int
     _hidapi_c.hid_close.argtypes = [ctypes.c_void_p]
-    _hidapi_c.hid_read_timeout.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_size_t, ctypes.c_int]
+    _hidapi_c.hid_read_timeout.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_size_t, ctypes.c_int]
     _hidapi_c.hid_read_timeout.restype = ctypes.c_int
     HIDAPI_AVAILABLE = True
 except Exception as e:
@@ -88,6 +88,7 @@ class ProController(BaseController):
 
             log.info("Pro Controller connected")
             self._connected = True
+            self._prev_buttons.clear()
             self._haptics = ProControllerHaptics(_hidapi_c, self._device_handle)
             return True
         except Exception as e:
@@ -142,25 +143,31 @@ class ProController(BaseController):
 
     def get_pressed(self) -> list[str]:
         """Get list of buttons just pressed (edge detection)."""
+        pressed, _ = self.get_events()
+        return pressed
+
+    def get_events(self) -> tuple[list[str], list[str]]:
+        """Get (pressed, released) button events (edge detection)."""
         if not self.connected or not HIDAPI_AVAILABLE:
-            return []
+            return ([], [])
 
         try:
             bytes_read = _hidapi_c.hid_read_timeout(
                 self._device_handle, self._read_buffer, 64, 10
             )
             if bytes_read <= 0:
-                return []
+                return ([], [])
 
             data = self._read_buffer.raw[:bytes_read]
             current = self._parse_buttons(data)
             pressed = list(current - self._prev_buttons)
+            released = list(self._prev_buttons - current)
             self._prev_buttons = current
-            return pressed
+            return (pressed, released)
         except Exception as e:
             log.warning(f"Read error: {e}")
             self._connected = False
-            return []
+            return ([], [])
 
     def trigger_haptic(self, pattern: str) -> None:
         """Trigger haptic feedback pattern."""

@@ -1,0 +1,87 @@
+version: 2
+
+settings:
+  poll_interval_ms: 10
+  app_focus_cache_ttl_ms: 100
+  controller:
+    preferred: auto
+  wispr:
+    mode: rcmd_hold
+    hold_ms: 450
+
+profiles:
+  active: default
+  items:
+    default:
+      mappings:
+        default:
+          dpad_up:
+            type: keystroke
+            key: up
+          dpad_down:
+            type: keystroke
+            key: down
+          dpad_left:
+            type: keystroke
+            key: left
+          dpad_right:
+            type: keystroke
+            key: right
+          cross:
+            type: keystroke
+            key: return
+          circle:
+            type: keystroke
+            key: escape
+          triangle:
+            type: wispr
+          square:
+            type: keystroke
+            key: tab
+          l1:
+            type: keystroke
+            key: "["
+            modifiers: [cmd, shift]
+          r1:
+            type: keystroke
+            key: "]"
+            modifiers: [cmd, shift]
+          l2:
+            type: keystroke
+            key: up
+            modifiers: [alt]
+          r2:
+            type: keystroke
+            key: down
+            modifiers: [alt]
+          l3:
+            type: keystroke
+            key: c
+            modifiers: [ctrl]
+          r3:
+            type: keystroke
+            key: d
+            modifiers: [ctrl]
+          ps:
+            type: wispr
+          options:
+            type: keystroke
+            key: "y"
+          share:
+            type: keystroke
+            key: "n"
+
+haptics:
+  enabled: true
+  patterns:
+    confirm:
+      intensity: 128
+      duration_ms: 50
+    error:
+      intensity: 255
+      duration_ms: 100
+      repeat: 2
+    connect:
+      intensity: 64
+      duration_ms: 200
+

@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+.Python
+*.egg-info/
+
+# Virtualenvs
+venv/
+.venv/
+
+# Build outputs
+build/
+dist/
+
+# Swift (native rewrite)
+native/.build/
+native/.swiftpm/
+native/dist/
+
+# Tooling caches
+.pytest_cache/
+.ruff_cache/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/

@@ -2,8 +2,29 @@
 import time
 from AppKit import NSWorkspace
 
-WARP_BUNDLE_IDS = {"dev.warp.Warp-Stable", "dev.warp.Warp"}
-TERMINAL_BUNDLE_IDS = WARP_BUNDLE_IDS | {"com.apple.Terminal", "com.googlecode.iterm2"}
+# Bundle ID to context name mapping
+APP_CONTEXTS = {
+    # Warp terminal
+    "dev.warp.Warp-Stable": "warp",
+    "dev.warp.Warp": "warp",
+    # Arc browser
+    "company.thebrowser.Browser": "arc",
+    # Chrome
+    "com.google.Chrome": "chrome",
+    # Slack
+    "com.tinyspeck.slackmacgap": "slack",
+    # ChatGPT
+    "com.openai.chat": "chatgpt",
+    # Claude desktop
+    "com.anthropic.claudefordesktop": "claude",
+}
+
+TERMINAL_BUNDLE_IDS = {
+    "dev.warp.Warp-Stable",
+    "dev.warp.Warp",
+    "com.apple.Terminal",
+    "com.googlecode.iterm2",
+}
 
 
 class AppFocus:
@@ -26,16 +47,11 @@ class AppFocus:
         self._cache_time = now
         return self._cached_bundle
 
-    def is_warp_focused(self) -> bool:
-        """Check if Warp terminal is the frontmost app."""
-        return self.get_frontmost_app() in WARP_BUNDLE_IDS
-
     def is_terminal_focused(self) -> bool:
         """Check if any terminal app is frontmost."""
         return self.get_frontmost_app() in TERMINAL_BUNDLE_IDS
 
     def get_context(self) -> str:
         """Return context name for mapping resolution."""
-        if self.is_warp_focused():
-            return "warp"
-        return "default"
+        bundle = self.get_frontmost_app()
+        return APP_CONTEXTS.get(bundle, "default")
