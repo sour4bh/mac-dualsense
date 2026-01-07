@@ -3,15 +3,9 @@ import Carbon.HIToolbox
 import CoreGraphics
 import Foundation
 
-enum CCModifier: String {
-    case cmd
-    case shift
-    case alt
-    case ctrl
-}
-
-final class KeySender {
+final class KeySender: @unchecked Sendable {
     private let source = CGEventSource(stateID: .combinedSessionState)
+    private var heldModifiers: Set<String> = []
 
     func sendKeystroke(key: String, modifiers: [String]?) -> Bool {
         guard let code = Self.keyCode(for: key) else { return false }
@@ -29,28 +23,82 @@ final class KeySender {
         return true
     }
 
-    func setRightCommand(down: Bool) -> Bool {
-        let code = CGKeyCode(kVK_RightCommand)
-        guard let event = CGEvent(keyboardEventSource: source, virtualKey: code, keyDown: down) else {
+    func setModifier(_ modifier: String, down: Bool) -> Bool {
+        let mod = modifier.lowercased()
+        guard let keycode = Self.modifierKeyCode(for: mod) else { return false }
+
+        guard let event = CGEvent(keyboardEventSource: source, virtualKey: keycode, keyDown: down) else {
             return false
         }
-        event.flags = down ? .maskCommand : []
+        event.flags = down ? Self.modifierFlag(for: mod) : []
         event.post(tap: .cghidEventTap)
+
+        if down {
+            heldModifiers.insert(mod)
+        } else {
+            heldModifiers.remove(mod)
+        }
         return true
+    }
+
+    func toggleModifier(_ modifier: String) -> Bool {
+        let mod = modifier.lowercased()
+        return setModifier(mod, down: !heldModifiers.contains(mod))
+    }
+
+    func holdModifier(_ modifier: String, holdMs: Int) -> Bool {
+        guard setModifier(modifier, down: true) else { return false }
+        Thread.sleep(forTimeInterval: Double(max(0, holdMs)) / 1000.0)
+        _ = setModifier(modifier, down: false)
+        return true
+    }
+
+    func releaseAllModifiers() {
+        for mod in heldModifiers {
+            _ = setModifier(mod, down: false)
+        }
+    }
+
+    private static func modifierKeyCode(for mod: String) -> CGKeyCode? {
+        switch mod {
+        case "lcmd": return CGKeyCode(kVK_Command)
+        case "rcmd": return CGKeyCode(kVK_RightCommand)
+        case "lshift": return CGKeyCode(kVK_Shift)
+        case "rshift": return CGKeyCode(kVK_RightShift)
+        case "lctrl": return CGKeyCode(kVK_Control)
+        case "rctrl": return CGKeyCode(kVK_RightControl)
+        case "lalt", "loption": return CGKeyCode(kVK_Option)
+        case "ralt", "roption": return CGKeyCode(kVK_RightOption)
+        case "fn": return CGKeyCode(kVK_Function)
+        default: return nil
+        }
+    }
+
+    private static func modifierFlag(for mod: String) -> CGEventFlags {
+        switch mod {
+        case "lcmd", "rcmd", "cmd", "command": return .maskCommand
+        case "lshift", "rshift", "shift": return .maskShift
+        case "lctrl", "rctrl", "ctrl", "control": return .maskControl
+        case "lalt", "ralt", "loption", "roption", "alt", "option": return .maskAlternate
+        case "fn": return .maskSecondaryFn
+        default: return []
+        }
     }
 
     private static func flags(from modifiers: [String]?) -> CGEventFlags {
         var flags: CGEventFlags = []
         for raw in modifiers ?? [] {
             switch raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
-            case "cmd", "command":
+            case "cmd", "command", "lcmd", "rcmd":
                 flags.insert(.maskCommand)
-            case "shift":
+            case "shift", "lshift", "rshift":
                 flags.insert(.maskShift)
-            case "alt", "option":
+            case "alt", "option", "lalt", "ralt", "loption", "roption":
                 flags.insert(.maskAlternate)
-            case "ctrl", "control":
+            case "ctrl", "control", "lctrl", "rctrl":
                 flags.insert(.maskControl)
+            case "fn":
+                flags.insert(.maskSecondaryFn)
             default:
                 break
             }
@@ -64,6 +112,7 @@ final class KeySender {
 
         let lower = raw.lowercased()
         switch lower {
+        // Basic keys
         case "return", "enter":
             return CGKeyCode(kVK_Return)
         case "escape", "esc":
@@ -74,6 +123,7 @@ final class KeySender {
             return CGKeyCode(kVK_Space)
         case "backspace", "delete":
             return CGKeyCode(kVK_Delete)
+        // Arrow keys
         case "up":
             return CGKeyCode(kVK_UpArrow)
         case "down":
@@ -82,6 +132,44 @@ final class KeySender {
             return CGKeyCode(kVK_LeftArrow)
         case "right":
             return CGKeyCode(kVK_RightArrow)
+        // Navigation keys
+        case "home":
+            return CGKeyCode(kVK_Home)
+        case "end":
+            return CGKeyCode(kVK_End)
+        case "pageup", "page_up":
+            return CGKeyCode(kVK_PageUp)
+        case "pagedown", "page_down":
+            return CGKeyCode(kVK_PageDown)
+        case "forwarddelete", "forward_delete", "delete_forward":
+            return CGKeyCode(kVK_ForwardDelete)
+        case "help":
+            return CGKeyCode(kVK_Help)
+        // Function keys
+        case "f1":
+            return CGKeyCode(kVK_F1)
+        case "f2":
+            return CGKeyCode(kVK_F2)
+        case "f3":
+            return CGKeyCode(kVK_F3)
+        case "f4":
+            return CGKeyCode(kVK_F4)
+        case "f5":
+            return CGKeyCode(kVK_F5)
+        case "f6":
+            return CGKeyCode(kVK_F6)
+        case "f7":
+            return CGKeyCode(kVK_F7)
+        case "f8":
+            return CGKeyCode(kVK_F8)
+        case "f9":
+            return CGKeyCode(kVK_F9)
+        case "f10":
+            return CGKeyCode(kVK_F10)
+        case "f11":
+            return CGKeyCode(kVK_F11)
+        case "f12":
+            return CGKeyCode(kVK_F12)
         default:
             break
         }
@@ -112,6 +200,10 @@ final class KeySender {
                 return CGKeyCode(kVK_ANSI_Minus)
             case "=":
                 return CGKeyCode(kVK_ANSI_Equal)
+            case "`":
+                return CGKeyCode(kVK_ANSI_Grave)
+            case "\\":
+                return CGKeyCode(kVK_ANSI_Backslash)
             default:
                 break
             }

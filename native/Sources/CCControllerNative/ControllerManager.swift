@@ -27,8 +27,11 @@ final class ControllerManager: ObservableObject {
     var preferredController: (() -> String)?
     var resolveAction: ((String) -> CCActionDef?)?
     var accessibilityPrompt: (() -> Void)?
+    var wisprMode: (() -> String)?
+    var wisprHoldMs: (() -> Int)?
 
     private let keySender = KeySender()
+    private var wisprHeldButton: String? = nil
     private var controllerRefs: [String: GCController] = [:]
 
     init() {
@@ -179,9 +182,55 @@ final class ControllerManager: ObservableObject {
                 _ = keySender.sendKeystroke(key: key, modifiers: actionDef.modifiers)
             }
         case "wispr":
-            _ = keySender.setRightCommand(down: pressed)
+            handleWispr(button: canonical, pressed: pressed)
         default:
             break
+        }
+    }
+
+    private func handleWispr(button: String, pressed: Bool) {
+        let mode = (wisprMode?() ?? "rcmd_hold").lowercased()
+        let holdMs = wisprHoldMs?() ?? 450
+
+        if pressed {
+            wisprHeldButton = button
+            switch mode {
+            case "cmd_right", "cmd+right", "cmd-right":
+                _ = keySender.sendKeystroke(key: "right", modifiers: ["cmd"])
+            case "lcmd_pulse", "pulse_lcmd":
+                DispatchQueue.global().async { [keySender] in
+                    _ = keySender.holdModifier("lcmd", holdMs: holdMs)
+                }
+            case "lcmd_toggle", "toggle_lcmd":
+                _ = keySender.toggleModifier("lcmd")
+            case "lcmd_hold", "hold_lcmd":
+                _ = keySender.setModifier("lcmd", down: true)
+            case "rcmd_pulse", "pulse_rcmd":
+                DispatchQueue.global().async { [keySender] in
+                    _ = keySender.holdModifier("rcmd", holdMs: holdMs)
+                }
+            case "rcmd_toggle", "toggle_rcmd":
+                _ = keySender.toggleModifier("rcmd")
+            case "rcmd_hold", "hold_rcmd":
+                _ = keySender.setModifier("rcmd", down: true)
+            case "fn_hold", "hold_fn":
+                _ = keySender.setModifier("fn", down: true)
+            default:
+                _ = keySender.sendKeystroke(key: "right", modifiers: ["cmd"])
+            }
+        } else {
+            guard wisprHeldButton == button else { return }
+            wisprHeldButton = nil
+            switch mode {
+            case "lcmd_hold", "hold_lcmd":
+                _ = keySender.setModifier("lcmd", down: false)
+            case "rcmd_hold", "hold_rcmd":
+                _ = keySender.setModifier("rcmd", down: false)
+            case "fn_hold", "hold_fn":
+                _ = keySender.setModifier("fn", down: false)
+            default:
+                break
+            }
         }
     }
 

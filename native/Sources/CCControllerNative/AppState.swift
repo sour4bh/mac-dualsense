@@ -19,5 +19,11 @@ final class AppState: ObservableObject {
         controllerManager.accessibilityPrompt = { [weak self] in
             self?.configStore.ensureAccessibilityPermission()
         }
+        controllerManager.wisprMode = { [weak self] in
+            self?.configStore.wisprSettings().mode ?? "rcmd_hold"
+        }
+        controllerManager.wisprHoldMs = { [weak self] in
+            self?.configStore.wisprSettings().holdMs ?? 450
+        }
     }
 }
