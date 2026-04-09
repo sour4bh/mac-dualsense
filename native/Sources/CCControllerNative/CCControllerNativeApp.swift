@@ -15,7 +15,9 @@ struct CCControllerNativeApp: App {
 
         WindowGroup("Preferences", id: "preferences") {
             PreferencesView(appState: appState)
+                .frame(minWidth: 700, minHeight: 700)
         }
+        .defaultSize(width: 800, height: 800)
     }
 }
 

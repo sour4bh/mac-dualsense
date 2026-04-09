@@ -266,6 +266,14 @@ final class ConfigStore: ObservableObject {
         config.settings.wispr ?? .init()
     }
 
+    func hapticsEnabled() -> Bool {
+        config.haptics?.enabled ?? true
+    }
+
+    func hapticPattern(_ name: String) -> CCHapticPattern? {
+        config.haptics?.patterns?[name]
+    }
+
     func ensureAccessibilityPermission() {
         let options: NSDictionary = [kAXTrustedCheckOptionPrompt.takeRetainedValue() as NSString: true]
         _ = AXIsProcessTrustedWithOptions(options)

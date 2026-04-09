@@ -29,8 +29,11 @@ final class ControllerManager: ObservableObject {
     var accessibilityPrompt: (() -> Void)?
     var wisprMode: (() -> String)?
     var wisprHoldMs: (() -> Int)?
+    var hapticsEnabled: (() -> Bool)?
+    var hapticPattern: ((String) -> CCHapticPattern?)?
 
     private let keySender = KeySender()
+    private let haptics = ControllerHaptics()
     private var wisprHeldButton: String? = nil
     private var controllerRefs: [String: GCController] = [:]
 
@@ -69,11 +72,14 @@ final class ControllerManager: ObservableObject {
     }
 
     private func refreshConnectedControllers() {
+        let previousActiveID = activeController?.id
         let current = GCController.controllers()
+        Logger.shared.info("refreshConnectedControllers: found \(current.count) controller(s)")
         var next: [ConnectedController] = []
         var refs: [String: GCController] = [:]
         for c in current {
             let stableID = String(ObjectIdentifier(c).hashValue)
+            Logger.shared.info("  - \(c.productCategory) (\(c.vendorName ?? "unknown"))")
             next.append(
                 ConnectedController(
                     id: stableID,
@@ -88,13 +94,24 @@ final class ControllerManager: ObservableObject {
         if activeController == nil || (activeController != nil && !next.contains(activeController!)) {
             activeController = pickActiveController()
             pressed.removeAll()
+            Logger.shared.info("Active controller set to: \(activeController?.name ?? "none")")
+        }
+        if let activeController, activeController.id != previousActiveID {
+            triggerHaptic(name: "connect")
         }
         attachHandlers()
     }
 
+    private func activeGCController() -> GCController? {
+        guard let activeController else { return nil }
+        return controllerRefs[activeController.id]
+    }
+
     private func attachHandlers() {
+        Logger.shared.info("attachHandlers: attaching to \(controllerRefs.count) controller(s)")
         for (id, controller) in controllerRefs {
             let profile = controller.physicalInputProfile
+            Logger.shared.info("  Controller \(id): \(profile.buttons.count) buttons, \(profile.dpads.count) dpads")
 
             for (name, button) in profile.buttons {
                 button.pressedChangedHandler = { [weak self] _, _, pressed in
@@ -105,6 +122,7 @@ final class ControllerManager: ObservableObject {
             }
 
             if let dpad = profile.dpads[GCInputDirectionPad] {
+                Logger.shared.info("  D-pad found, attaching handlers")
                 dpad.up.pressedChangedHandler = { [weak self] _, _, pressed in
                     Task { @MainActor in self?.handle(controllerID: id, buttonName: "dpad_up", pressed: pressed) }
                 }
@@ -147,7 +165,11 @@ final class ControllerManager: ObservableObject {
     }
 
     private func handle(controllerID: String, buttonName: String, pressed: Bool) {
-        guard activeController?.id == controllerID else { return }
+        Logger.shared.debug("handle: button=\(buttonName) pressed=\(pressed) controllerID=\(controllerID) activeID=\(activeController?.id ?? "nil")")
+        guard activeController?.id == controllerID else {
+            Logger.shared.debug("  -> ignored (controller mismatch)")
+            return
+        }
         let canonical = canonicalButton(from: buttonName) ?? buttonName
 
         if pressed {
@@ -176,19 +198,34 @@ final class ControllerManager: ObservableObject {
         accessibilityPrompt?()
 
         guard let actionDef else { return }
+        var shouldTriggerHaptic = false
+        var hapticName: String = "confirm"
         switch actionDef.type.lowercased() {
         case "keystroke":
             if pressed, let key = actionDef.key {
-                _ = keySender.sendKeystroke(key: key, modifiers: actionDef.modifiers)
+                let ok = keySender.sendKeystroke(key: key, modifiers: actionDef.modifiers)
+                shouldTriggerHaptic = true
+                hapticName = ok ? "confirm" : "error"
             }
         case "wispr":
-            handleWispr(button: canonical, pressed: pressed)
+            if pressed {
+                let ok = handleWispr(button: canonical, pressed: pressed)
+                shouldTriggerHaptic = true
+                hapticName = ok ? "confirm" : "error"
+            } else {
+                _ = handleWispr(button: canonical, pressed: pressed)
+            }
         default:
             break
         }
+
+        if shouldTriggerHaptic {
+            triggerHaptic(name: hapticName)
+        }
     }
 
-    private func handleWispr(button: String, pressed: Bool) {
+    @discardableResult
+    private func handleWispr(button: String, pressed: Bool) -> Bool {
         let mode = (wisprMode?() ?? "rcmd_hold").lowercased()
         let holdMs = wisprHoldMs?() ?? 450
 
@@ -196,30 +233,32 @@ final class ControllerManager: ObservableObject {
             wisprHeldButton = button
             switch mode {
             case "cmd_right", "cmd+right", "cmd-right":
-                _ = keySender.sendKeystroke(key: "right", modifiers: ["cmd"])
+                return keySender.sendKeystroke(key: "right", modifiers: ["cmd"])
             case "lcmd_pulse", "pulse_lcmd":
                 DispatchQueue.global().async { [keySender] in
                     _ = keySender.holdModifier("lcmd", holdMs: holdMs)
                 }
+                return true
             case "lcmd_toggle", "toggle_lcmd":
-                _ = keySender.toggleModifier("lcmd")
+                return keySender.toggleModifier("lcmd")
             case "lcmd_hold", "hold_lcmd":
-                _ = keySender.setModifier("lcmd", down: true)
+                return keySender.setModifier("lcmd", down: true)
             case "rcmd_pulse", "pulse_rcmd":
                 DispatchQueue.global().async { [keySender] in
                     _ = keySender.holdModifier("rcmd", holdMs: holdMs)
                 }
+                return true
             case "rcmd_toggle", "toggle_rcmd":
-                _ = keySender.toggleModifier("rcmd")
+                return keySender.toggleModifier("rcmd")
             case "rcmd_hold", "hold_rcmd":
-                _ = keySender.setModifier("rcmd", down: true)
+                return keySender.setModifier("rcmd", down: true)
             case "fn_hold", "hold_fn":
-                _ = keySender.setModifier("fn", down: true)
+                return keySender.setModifier("fn", down: true)
             default:
-                _ = keySender.sendKeystroke(key: "right", modifiers: ["cmd"])
+                return keySender.sendKeystroke(key: "right", modifiers: ["cmd"])
             }
         } else {
-            guard wisprHeldButton == button else { return }
+            guard wisprHeldButton == button else { return false }
             wisprHeldButton = nil
             switch mode {
             case "lcmd_hold", "hold_lcmd":
@@ -231,7 +270,25 @@ final class ControllerManager: ObservableObject {
             default:
                 break
             }
+            return true
         }
+    }
+
+    private func triggerHaptic(name: String) {
+        let enabled = hapticsEnabled?() ?? true
+        let pattern = hapticPattern?(name)
+
+        let fallback: ControllerHaptics.Spec
+        switch name {
+        case "error":
+            fallback = .init(intensity: 1.0, durationSeconds: 0.10, repeatCount: 2)
+        case "connect":
+            fallback = .init(intensity: 0.25, durationSeconds: 0.20, repeatCount: 1)
+        default:
+            fallback = .init(intensity: 0.5, durationSeconds: 0.05, repeatCount: 1)
+        }
+
+        haptics.play(controller: activeGCController(), enabled: enabled, pattern: pattern, fallback: fallback)
     }
 
     private func summarize(_ action: CCActionDef?) -> String {

@@ -25,5 +25,11 @@ final class AppState: ObservableObject {
         controllerManager.wisprHoldMs = { [weak self] in
             self?.configStore.wisprSettings().holdMs ?? 450
         }
+        controllerManager.hapticsEnabled = { [weak self] in
+            self?.configStore.hapticsEnabled() ?? true
+        }
+        controllerManager.hapticPattern = { [weak self] name in
+            self?.configStore.hapticPattern(name)
+        }
     }
 }

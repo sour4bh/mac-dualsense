@@ -41,10 +41,28 @@ struct PreferencesView: View {
 
 struct ControllerPreferencesView: View {
     @ObservedObject var appState: AppState
+    @ObservedObject var controllerManager: ControllerManager
+    @ObservedObject var configStore: ConfigStore
+
+    @State private var editingButton: String? = nil
+    @State private var viewSide: ControllerViewSide = .front
+
+    init(appState: AppState) {
+        self.appState = appState
+        self.controllerManager = appState.controllerManager
+        self.configStore = appState.configStore
+    }
+
+    private var controllerType: ControllerType {
+        guard let active = controllerManager.activeController else { return .dualSense }
+        return ControllerType.detect(name: active.name, vendor: active.vendor)
+    }
 
     var body: some View {
-        let controllerManager = appState.controllerManager
-        let configStore = appState.configStore
+        let activeProfile = configStore.activeProfileName()
+        let context = "default"
+        let availableViews = controllerType.availableViews
+        let viewInstruction = "Click a button to edit its binding"
 
         VStack(alignment: .leading, spacing: 16) {
             HStack {
@@ -57,66 +75,108 @@ struct ControllerPreferencesView: View {
                 .keyboardShortcut("s", modifiers: [.command])
             }
 
-            Form {
-                Picker("Preferred controller", selection: Binding(
-                    get: { configStore.preferredController() },
-                    set: { configStore.setPreferredController($0) }
-                )) {
-                    Text("Auto").tag("auto")
-                    Text("DualSense").tag("dualsense")
-                    Text("Pro Controller").tag("pro_controller")
-                }
-
-                Picker("Active controller", selection: Binding(
-                    get: { controllerManager.activeController?.id ?? "" },
-                    set: { controllerManager.setActiveController(id: $0.isEmpty ? nil : $0) }
-                )) {
-                    Text("—").tag("")
-                    ForEach(controllerManager.controllers) { c in
-                        Text(c.vendor != nil ? "\(c.name) (\(c.vendor!))" : c.name).tag(c.id)
+            HStack(alignment: .top, spacing: 24) {
+                VStack(alignment: .leading, spacing: 12) {
+                    Picker("Preferred", selection: Binding(
+                        get: { configStore.preferredController() },
+                        set: { configStore.setPreferredController($0) }
+                    )) {
+                        Text("Auto").tag("auto")
+                        Text("DualSense").tag("dualsense")
+                        Text("Pro Controller").tag("pro_controller")
                     }
-                }
+                    .frame(maxWidth: .infinity)
 
-                HStack {
-                    Text("Live input")
-                    Spacer()
-                    Text(liveInputSummary(controllerManager))
+                    Picker("Active", selection: Binding(
+                        get: { controllerManager.activeController?.id ?? "" },
+                        set: { controllerManager.setActiveController(id: $0.isEmpty ? nil : $0) }
+                    )) {
+                        Text("—").tag("")
+                        ForEach(controllerManager.controllers) { c in
+                            Text(c.vendor != nil ? "\(c.name) (\(c.vendor!))" : c.name).tag(c.id)
+                        }
+                    }
+                    .frame(maxWidth: .infinity)
+
+                    Text(liveInputSummary)
                         .foregroundStyle(.secondary)
                         .monospaced()
+                        .font(.system(size: 12))
                 }
-            }
+                .frame(width: 260)
 
-            Table(controllerManager.recentEvents) {
-                TableColumn("Time") { e in
-                    Text(timeString(e.time)).monospaced()
-                }.width(90)
-                TableColumn("State") { e in
-                    Text(e.state)
-                }.width(90)
-                TableColumn("Button") { e in
-                    Text(e.button).monospaced()
-                }.width(160)
-                TableColumn("Action") { e in
-                    Text(e.action).monospaced()
+                VStack(alignment: .leading, spacing: 12) {
+                    if availableViews.count > 1 {
+                        Picker("View", selection: $viewSide) {
+                            ForEach(availableViews) { view in
+                                Text(view.label).tag(view)
+                            }
+                        }
+                        .pickerStyle(.segmented)
+                        .frame(width: 220)
+                    }
+
+                    Text(viewInstruction)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    ControllerVisualView(
+                        controllerType: controllerType,
+                        viewSide: viewSide,
+                        pressed: controllerManager.pressed,
+                        getAction: { configStore.resolve(button: $0) },
+                        onEditButton: { button in
+                            editingButton = button
+                        }
+                    )
+                    .frame(maxWidth: .infinity, minHeight: 500)
                 }
             }
         }
         .padding(20)
+        .onChange(of: controllerType) { newType in
+            if !newType.availableViews.contains(viewSide) {
+                viewSide = .front
+            }
+        }
+        .popover(item: $editingButton) { button in
+            ButtonBindingEditor(
+                button: button,
+                action: Binding(
+                    get: {
+                        configStore.action(profile: activeProfile, context: context, button: button)
+                            ?? CCActionDef(type: "noop", key: nil, modifiers: nil)
+                    },
+                    set: { updated in
+                        configStore.setAction(
+                            profile: activeProfile,
+                            context: context,
+                            button: button,
+                            action: updated
+                        )
+                    }
+                ),
+                onDelete: {
+                    configStore.deleteAction(profile: activeProfile, context: context, button: button)
+                },
+                onDismiss: {
+                    editingButton = nil
+                }
+            )
+        }
     }
 
-    private func timeString(_ date: Date) -> String {
-        let f = DateFormatter()
-        f.dateFormat = "HH:mm:ss"
-        return f.string(from: date)
-    }
-
-    private func liveInputSummary(_ manager: ControllerManager) -> String {
-        let down = manager.pressed.sorted().joined(separator: ", ")
-        if let last = manager.lastEvent?.button {
+    private var liveInputSummary: String {
+        let down = controllerManager.pressed.sorted().joined(separator: ", ")
+        if let last = controllerManager.lastEvent?.button {
             return "Last: \(last)  •  Down: \(down.isEmpty ? "—" : down)"
         }
         return "—"
     }
+}
+
+extension String: @retroactive Identifiable {
+    public var id: String { self }
 }
 
 struct ProfilesPreferencesView: View {
@@ -257,15 +317,21 @@ struct ProfilesPreferencesView: View {
 
 struct KeybindsPreferencesView: View {
     @ObservedObject var appState: AppState
+    @ObservedObject var store: ConfigStore
+    @ObservedObject var controller: ControllerManager
     @State private var profile: String = ""
     @State private var context: String = "default"
     @State private var learnNextButton: Bool = false
     @State private var selectedButton: String? = nil
     @State private var errorMessage: String? = nil
 
+    init(appState: AppState) {
+        self.appState = appState
+        self.store = appState.configStore
+        self.controller = appState.controllerManager
+    }
+
     var body: some View {
-        let store = appState.configStore
-        let controller = appState.controllerManager
 
         let profiles = store.profileNames()
         let active = store.activeProfileName()
