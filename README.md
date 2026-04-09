@@ -1,170 +1,211 @@
 # mac-dualsense
 
-Use a DualSense (or Pro Controller) as a keyboard shortcut remote on macOS — per-app context switching, profiles, haptic feedback, and voice activation, all driven by a single YAML config file.
+**Your DualSense is a 18-button programmable keyboard for macOS.**
 
-![macOS 13+](https://img.shields.io/badge/macOS-13%2B-blue) ![Swift](https://img.shields.io/badge/Swift-6-orange) ![License](https://img.shields.io/badge/license-MIT-green)
+Navigate terminals, browsers, and AI chat apps from your couch — without touching the keyboard. Context-aware mappings, Wispr voice dictation on one button, haptic feedback, zero dependencies.
+
+![macOS 13+](https://img.shields.io/badge/macOS-13%2B-blue) ![Swift 6](https://img.shields.io/badge/Swift-6-orange) ![License: MIT](https://img.shields.io/badge/license-MIT-green) ![GameController](https://img.shields.io/badge/GameController-framework-purple)
 
 ---
 
-## What it does
+<!-- Add a GIF here showing controller buttons triggering actions in Warp/Claude -->
 
-- **Context-aware mappings** — buttons do different things in Warp, Arc, Slack, Claude, ChatGPT, Chrome, and a global fallback
-- **Profiles** — switch full mapping sets on the fly
-- **Wispr integration** — hold or toggle a button to activate [Wispr Flow](https://wisprflow.ai/) voice dictation (multiple trigger modes)
-- **Haptic feedback** — configurable patterns on connect/action/error
-- **Live visual feedback** — menu bar icon shows active controller and context
-- **Zero runtime dependencies** — native SwiftUI + GameController framework, no drivers or Homebrew packages required
+## Why
 
-## Requirements
+You're on a call, reading docs, or chatting with an AI assistant. You keep reaching for the keyboard just to scroll, switch tabs, or trigger voice dictation. Your PS5 controller is sitting right there.
 
-- macOS 13 Ventura or later
-- DualSense (PS5) or Nintendo Pro Controller connected via USB or Bluetooth
-- Accessibility permission (to inject keystrokes)
+mac-dualsense maps every button to any keystroke, per app, with no drivers:
+
+- **In Warp**: D-pad scrolls blocks, L1/R1 navigates tabs, Options runs the command
+- **In Claude/ChatGPT**: Cross sends, Triangle triggers Wispr voice dictation, L1/R1 moves between chats
+- **In Arc/Chrome**: Circle goes back, L1/R1 switches tabs, L3 focuses the URL bar
+- **Everywhere**: D-pad = arrows, Cross = Return, Circle = Escape — the basics just work
+
+Mappings switch automatically when you change the focused app.
 
 ## Install
 
-### Download (recommended)
+### Download
 
-1. Download the latest `.zip` from [Releases](../../releases/latest)
-2. Unzip and drag **CC Controller Native.app** to `/Applications`
-3. Launch it — a controller icon appears in the menu bar
-4. Go to **System Settings → Privacy & Security → Accessibility** and enable **CC Controller Native**
+1. Grab the latest `.zip` from [**Releases →**](../../releases/latest)
+2. Drag **mac-dualsense.app** to `/Applications`
+3. Launch — a controller icon appears in the menu bar
+4. System Settings → Privacy & Security → Accessibility → enable **mac-dualsense**
 
-> First launch: macOS may warn "unidentified developer." Right-click the app → Open → Open to bypass.
+> macOS Gatekeeper warning on first launch: right-click the app → Open → Open.
 
 ### Build from source
+
+Requires Xcode 16+ / Swift 6.
 
 ```bash
 git clone https://github.com/sour4bh/mac-dualsense.git
 cd mac-dualsense
-native/scripts/install_app.sh   # builds, installs to /Applications, and launches
+native/scripts/install_app.sh
 ```
 
-Requires Xcode 16+ / Swift 6 toolchain. Or open `native/Package.swift` in Xcode and press Run.
+This builds, installs to `/Applications`, and launches.
 
-## Configuration
+## Setup in 2 minutes
 
-On first launch the config is seeded to:
+1. Connect your DualSense via USB or Bluetooth
+2. Open the app — it auto-detects the controller
+3. The default config works immediately (D-pad, face buttons, shoulder buttons all mapped)
+4. Edit `~/Library/Application Support/cc-controller/mappings.yaml` to customize — the app hot-reloads on save
 
-```
-~/Library/Application Support/cc-controller/mappings.yaml
-```
+## Wispr voice dictation
 
-Edit it with any text editor. The app hot-reloads changes on save.
+Hold Triangle (or the PS button) to activate [Wispr Flow](https://wisprflow.ai/). Dictate, release, done. Eight trigger modes available:
 
-### Config structure
-
-```yaml
-settings:
-  controller:
-    preferred: auto          # auto | dualsense | pro_controller
-  wispr:
-    mode: rcmd_hold          # see Wispr modes below
-
-profiles:
-  active: default
-  items:
-    default:
-      mappings:
-        default:             # fallback for all apps
-          cross:
-            type: keystroke
-            key: return
-        warp:                # overrides when Warp is frontmost
-          square:
-            type: keystroke
-            key: k
-            modifiers: [cmd]
-```
-
-### Button names
-
-| DualSense | Name | | DualSense | Name |
-|---|---|---|---|---|
-| Cross (×) | `cross` | | L1 | `l1` |
-| Circle (○) | `circle` | | R1 | `r1` |
-| Triangle (△) | `triangle` | | L2 | `l2` |
-| Square (□) | `square` | | R2 | `r2` |
-| D-pad up | `dpad_up` | | L3 (stick click) | `l3` |
-| D-pad down | `dpad_down` | | R3 (stick click) | `r3` |
-| D-pad left | `dpad_left` | | PS button | `ps` |
-| D-pad right | `dpad_right` | | Options | `options` |
-| Touchpad click | `touchpad` | | Share/Create | `share` |
-
-### App contexts
-
-| Context key | App |
+| Mode | How it works |
 |---|---|
-| `warp` | Warp terminal |
-| `arc` | Arc browser |
-| `chrome` | Google Chrome |
-| `slack` | Slack |
-| `chatgpt` | ChatGPT desktop |
-| `claude` | Claude desktop |
-| `default` | Everything else |
+| `rcmd_hold` | Holds right ⌘ while the button is pressed |
+| `rcmd_toggle` | Toggles right ⌘ on/off with each press |
+| `rcmd_pulse` | Taps right ⌘ for `hold_ms` then releases |
+| `fn_hold` | Holds Fn while pressed |
+| `cmd_right` | Sends Cmd+Right |
 
-To add a new app: add its bundle ID to `AppFocus.swift` and add a context block to your YAML.
+Set `settings.wispr.mode` in your config to switch modes.
 
-### Action types
+## Features
 
-```yaml
-# Send a keystroke
-type: keystroke
-key: return
-modifiers: [cmd, shift]   # optional: cmd, shift, alt, ctrl
+- **Context-aware mappings** — different actions per frontmost app, with a global fallback
+- **Profiles** — define multiple full mapping sets and switch between them
+- **Haptic feedback** — configurable intensity/duration patterns on connect, action, and error
+- **Visual controller map** — interactive button layout in Preferences, click to assign
+- **Extended key support** — function keys, media keys, special characters
+- **Modifier management** — hold, release, or toggle any modifier key (useful for gaming-style hold-to-run)
+- **Multi-controller** — auto-detects DualSense or Pro Controller, or pin a preference
+- **No runtime dependencies** — native GameController framework, no HID drivers, no Homebrew
 
-# Activate Wispr voice dictation
-type: wispr
+## Supported controllers
 
-# Hold/release a modifier key
-type: modifier
-modifier: rcmd
-action: hold              # hold | release | toggle
-```
-
-### Wispr modes
-
-| Mode | Behavior |
+| Controller | Connection |
 |---|---|
-| `rcmd_hold` | Hold right ⌘ while button is pressed |
-| `lcmd_hold` | Hold left ⌘ while button is pressed |
-| `fn_hold` | Hold Fn while button is pressed |
-| `rcmd_pulse` | Tap right ⌘ for `hold_ms`, then release |
-| `lcmd_pulse` | Tap left ⌘ for `hold_ms`, then release |
-| `rcmd_toggle` | Toggle right ⌘ on/off |
-| `lcmd_toggle` | Toggle left ⌘ on/off |
-| `cmd_right` | Send Cmd+Right keystroke |
+| Sony DualSense (PS5) | USB / Bluetooth |
+| Nintendo Switch Pro Controller | USB / Bluetooth |
 
 ## Default mappings
 
 <details>
-<summary>Global (all apps)</summary>
+<summary>Global fallback (all apps)</summary>
 
 | Button | Action |
 |---|---|
 | D-pad | Arrow keys |
-| Cross | Return |
-| Circle | Escape |
-| Square | Tab |
-| Triangle / PS | Wispr voice dictation |
-| L1 / R1 | Cmd+Shift+[ / ] (prev/next tab) |
-| L2 / R2 | Alt+Up / Alt+Down |
+| Cross (×) | Return |
+| Circle (○) | Escape |
+| Square (□) | Tab |
+| Triangle (△) / PS | Wispr voice dictation |
+| L1 / R1 | Cmd+Shift+[ / ] |
+| L2 / R2 | Alt+↑ / Alt+↓ |
 | L3 | Ctrl+C |
 | R3 | Ctrl+D |
 
 </details>
 
 <details>
-<summary>Warp, Arc, Chrome, Slack, ChatGPT, Claude</summary>
+<summary>Per-app overrides (Warp, Arc, Chrome, Slack, ChatGPT, Claude)</summary>
 
-See [`native/Sources/CCControllerNative/Resources/mappings.yaml`](native/Sources/CCControllerNative/Resources/mappings.yaml) for the full per-app default bindings.
+Full bindings in [`native/Sources/CCControllerNative/Resources/mappings.yaml`](native/Sources/CCControllerNative/Resources/mappings.yaml).
+
+</details>
+
+## Configuration reference
+
+Config lives at `~/Library/Application Support/cc-controller/mappings.yaml`, seeded from `native/Sources/CCControllerNative/Resources/mappings.yaml` on first run.
+
+<details>
+<summary>Full config structure</summary>
+
+```yaml
+version: 2
+
+settings:
+  controller:
+    preferred: auto          # auto | dualsense | pro_controller
+  wispr:
+    mode: rcmd_hold
+    hold_ms: 450
+
+profiles:
+  active: default
+  items:
+    default:
+      mappings:
+        default:             # global fallback
+          cross:
+            type: keystroke
+            key: return
+          triangle:
+            type: wispr
+        warp:                # active when Warp is frontmost
+          square:
+            type: keystroke
+            key: k
+            modifiers: [cmd]
+
+haptics:
+  enabled: true
+  patterns:
+    confirm:
+      intensity: 128
+      duration_ms: 50
+```
+
+</details>
+
+<details>
+<summary>Button names</summary>
+
+| Button | Name | | Button | Name |
+|---|---|---|---|---|
+| Cross (×) | `cross` | | L1 | `l1` |
+| Circle (○) | `circle` | | R1 | `r1` |
+| Triangle (△) | `triangle` | | L2 | `l2` |
+| Square (□) | `square` | | R2 | `r2` |
+| D-pad up | `dpad_up` | | L3 (click) | `l3` |
+| D-pad down | `dpad_down` | | R3 (click) | `r3` |
+| D-pad left | `dpad_left` | | PS | `ps` |
+| D-pad right | `dpad_right` | | Options | `options` |
+| Touchpad click | `touchpad` | | Share/Create | `share` |
+
+</details>
+
+<details>
+<summary>Action types</summary>
+
+```yaml
+# Keystroke with optional modifiers
+type: keystroke
+key: k
+modifiers: [cmd, shift]   # cmd | shift | alt | ctrl
+
+# Wispr voice dictation
+type: wispr
+
+# Hold/release/toggle a modifier key
+type: modifier
+modifier: rcmd             # rcmd | lcmd | rshift | lshift | ralt | lalt | rctrl | lctrl
+action: hold               # hold | release | toggle
+```
+
+</details>
+
+<details>
+<summary>Adding a new app context</summary>
+
+1. Find the app's bundle ID: `osascript -e 'id of app "AppName"'`
+2. Add it to the `contexts` dict in `AppFocus.swift`
+3. Add it to `knownContexts` in `ConfigStore.swift`
+4. Add a mapping block in `mappings.yaml` under `profiles.items.<profile>.mappings.<context>`
 
 </details>
 
 ## Contributing
 
-Bug reports, new context mappings, and controller support PRs are welcome. See [`AGENTS.md`](AGENTS.md) for contribution guidelines.
+PRs welcome — especially new app context mappings and controller support. See [`AGENTS.md`](AGENTS.md).
 
 ## License
 
-[MIT](LICENSE)
+[MIT](LICENSE) — © 2025 Sourabh Sharma
