@@ -2,12 +2,19 @@ import Foundation
 
 @MainActor
 final class AppState: ObservableObject {
-    @Published var isEnabled: Bool = false
+    private static let isEnabledDefaultsKey = "cc-controller.is-enabled"
+
+    @Published var isEnabled: Bool {
+        didSet {
+            UserDefaults.standard.set(isEnabled, forKey: Self.isEnabledDefaultsKey)
+        }
+    }
 
     let configStore = ConfigStore()
     let controllerManager = ControllerManager()
 
     init() {
+        isEnabled = UserDefaults.standard.object(forKey: Self.isEnabledDefaultsKey) as? Bool ?? true
         controllerManager.isEnabled = { [weak self] in self?.isEnabled ?? false }
         controllerManager.preferredController = { [weak self] in
             self?.configStore.preferredController() ?? "auto"

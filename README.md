@@ -28,9 +28,9 @@ Mappings switch automatically when you change the focused app.
 ### Download
 
 1. Grab the latest `.zip` from [**Releases →**](../../releases/latest)
-2. Drag **mac-dualsense.app** to `/Applications`
+2. Drag **CC Controller Native.app** to `/Applications`
 3. Launch — a controller icon appears in the menu bar
-4. System Settings → Privacy & Security → Accessibility → enable **mac-dualsense**
+4. System Settings → Privacy & Security → Accessibility → enable **CC Controller Native**
 
 > macOS Gatekeeper warning on first launch: right-click the app → Open → Open.
 
@@ -73,8 +73,8 @@ Set `settings.wispr.mode` in your config to switch modes.
 - **Profiles** — define multiple full mapping sets and switch between them
 - **Haptic feedback** — configurable intensity/duration patterns on connect, action, and error
 - **Visual controller map** — interactive button layout in Preferences, click to assign
-- **Extended key support** — function keys, media keys, special characters
-- **Modifier management** — hold, release, or toggle any modifier key (useful for gaming-style hold-to-run)
+- **Extended key support** — letters, digits, arrow/navigation keys, common punctuation, and `F1`-`F12`
+- **Wispr activation modes** — hold, pulse, toggle, and `Cmd+Right` trigger options for dictation workflows
 - **Multi-controller** — auto-detects DualSense or Pro Controller, or pin a preference
 - **No runtime dependencies** — native GameController framework, no HID drivers, no Homebrew
 
@@ -181,13 +181,11 @@ type: keystroke
 key: k
 modifiers: [cmd, shift]   # cmd | shift | alt | ctrl
 
+# Punctuation can be written as literal characters or named aliases.
+# Examples: [, ], comma, period, slash, semicolon, quote, minus, equal, backtick, backslash
+
 # Wispr voice dictation
 type: wispr
-
-# Hold/release/toggle a modifier key
-type: modifier
-modifier: rcmd             # rcmd | lcmd | rshift | lshift | ralt | lalt | rctrl | lctrl
-action: hold               # hold | release | toggle
 ```
 
 </details>

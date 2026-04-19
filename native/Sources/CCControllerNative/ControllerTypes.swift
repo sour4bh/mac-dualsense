@@ -91,10 +91,10 @@ enum ControllerType {
     case dualSense
     case proController
 
-    var buttonProvider: ControllerButtonProvider {
+    var supportsVisualEditor: Bool {
         switch self {
-        case .dualSense: return DualSenseButtonProvider()
-        case .proController: return DualSenseButtonProvider() // TODO: ProControllerButtonProvider
+        case .dualSense: return true
+        case .proController: return false
         }
     }
 
@@ -105,25 +105,32 @@ enum ControllerType {
         }
     }
 
-    func svgResourceName(for viewSide: ControllerViewSide) -> String {
+    var displayName: String {
+        switch self {
+        case .dualSense: return "DualSense"
+        case .proController: return "Pro Controller"
+        }
+    }
+
+    func svgResourceName(for viewSide: ControllerViewSide) -> String? {
         switch self {
         case .dualSense:
             return viewSide == .front
                 ? DualSenseVisuals.frontResourceName
                 : DualSenseVisuals.backResourceName
         case .proController:
-            return "ProController"
+            return nil
         }
     }
 
-    func viewBox(for viewSide: ControllerViewSide) -> CGRect {
+    func viewBox(for viewSide: ControllerViewSide) -> CGRect? {
         switch self {
         case .dualSense:
             return viewSide == .front
                 ? DualSenseVisuals.frontViewBox
                 : DualSenseVisuals.backViewBox
         case .proController:
-            return buttonProvider.viewBox
+            return nil
         }
     }
 
@@ -132,7 +139,7 @@ enum ControllerType {
         case .dualSense:
             return viewSide == .front ? DualSenseButtonProvider() : DualSenseBackButtonProvider()
         case .proController:
-            return viewSide == .front ? buttonProvider : nil
+            return nil
         }
     }
 

@@ -1,4 +1,5 @@
 import AppKit
+import Darwin
 import Foundation
 @preconcurrency import ApplicationServices
 import Yams
@@ -31,6 +32,8 @@ final class ConfigStore: ObservableObject {
     private let configURL: URL
     private let appFocus = AppFocus(cacheTTLms: 100)
     private var pendingSave: DispatchWorkItem?
+    private var pendingReload: DispatchWorkItem?
+    private var configWatcher: DispatchSourceFileSystemObject?
 
     static let knownContexts: [(key: String, label: String)] = [
         ("default", "Global"),
@@ -48,6 +51,7 @@ final class ConfigStore: ObservableObject {
         configURL = appSupportDir.appendingPathComponent("mappings.yaml", isDirectory: false)
 
         loadOrSeed()
+        startWatchingConfig()
     }
 
     func loadOrSeed() {
@@ -277,6 +281,40 @@ final class ConfigStore: ObservableObject {
     func ensureAccessibilityPermission() {
         let options: NSDictionary = [kAXTrustedCheckOptionPrompt.takeRetainedValue() as NSString: true]
         _ = AXIsProcessTrustedWithOptions(options)
+    }
+
+    private func startWatchingConfig() {
+        let fd = open(appSupportDir.path, O_EVTONLY)
+        guard fd >= 0 else { return }
+
+        let watcher = DispatchSource.makeFileSystemObjectSource(
+            fileDescriptor: fd,
+            eventMask: [.write, .rename, .delete, .extend, .attrib, .link, .revoke],
+            queue: DispatchQueue.global(qos: .utility)
+        )
+
+        watcher.setEventHandler { [weak self] in
+            Task { @MainActor in
+                self?.scheduleReloadFromDisk()
+            }
+        }
+        watcher.setCancelHandler {
+            close(fd)
+        }
+
+        configWatcher = watcher
+        watcher.resume()
+    }
+
+    private func scheduleReloadFromDisk(after delaySeconds: TimeInterval = 0.15) {
+        pendingReload?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            Task { @MainActor in
+                self?.reload()
+            }
+        }
+        pendingReload = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + delaySeconds, execute: work)
     }
 
     private func normalize() {

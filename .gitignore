@@ -11,6 +11,13 @@ native/AppBundle/
 build/
 dist/
 
+# Orphaned Python-era artifacts (package removed in 8629851; files may linger on disk)
+cc_controller/
+cc_controller.egg-info/
+scripts/
+.ruff_cache/
+venv/
+
 # OS / editor
 .DS_Store
 .idea/

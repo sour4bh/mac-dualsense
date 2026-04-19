@@ -69,12 +69,12 @@ struct DualSenseButtonProvider: ControllerButtonProvider {
         buttons["l2"] = .trigger(id: "l2", label: "L2", path: p("l2"))
         buttons["r2"] = .trigger(id: "r2", label: "R2", path: p("r2"))
 
-        // Center buttons
+        // Center buttons (mute + lightbar are drawn in the SVG but not exposed by
+        // GameController and the lightbar path overlaps touchpad — both are omitted
+        // from the editor so users can't bind what won't fire.)
         buttons["share"] = .center(id: "share", label: "Share", path: p("share"))
         buttons["options"] = .center(id: "options", label: "Options", path: p("options"))
         buttons["ps"] = .center(id: "ps", label: "PS", path: p("ps"))
-        buttons["mute"] = .center(id: "mute", label: "Mute", path: p("mute"))
-        buttons["lightbar"] = .center(id: "lightbar", label: "Lightbar", path: p("lightbar"))
         buttons["touchpad"] = .center(id: "touchpad", label: "Touchpad", path: p("touchpad"))
 
         return buttons

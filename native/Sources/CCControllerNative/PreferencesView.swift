@@ -62,7 +62,9 @@ struct ControllerPreferencesView: View {
         let activeProfile = configStore.activeProfileName()
         let context = "default"
         let availableViews = controllerType.availableViews
-        let viewInstruction = "Click a button to edit its binding"
+        let viewInstruction = controllerType.supportsVisualEditor
+            ? "Click a button to edit its binding"
+            : "Use the Keybinds tab to edit mappings for this controller."
 
         VStack(alignment: .leading, spacing: 16) {
             HStack {

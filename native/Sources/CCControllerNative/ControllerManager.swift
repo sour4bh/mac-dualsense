@@ -54,13 +54,19 @@ final class ControllerManager: ObservableObject {
         GCController.startWirelessControllerDiscovery {}
     }
 
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+        keySender.releaseAllModifiers()
+    }
+
     func setActiveController(id: String?) {
+        let previousActiveID = activeController?.id
         if let id, let ctrl = controllers.first(where: { $0.id == id }) {
             activeController = ctrl
         } else {
             activeController = pickActiveController()
         }
-        pressed.removeAll()
+        resetTransientState(releaseModifiers: activeController?.id != previousActiveID)
     }
 
     @objc private func controllerDidConnect(_ note: Notification) {
@@ -93,7 +99,7 @@ final class ControllerManager: ObservableObject {
         controllerRefs = refs
         if activeController == nil || (activeController != nil && !next.contains(activeController!)) {
             activeController = pickActiveController()
-            pressed.removeAll()
+            resetTransientState(releaseModifiers: previousActiveID != nil)
             Logger.shared.info("Active controller set to: \(activeController?.name ?? "none")")
         }
         if let activeController, activeController.id != previousActiveID {
@@ -105,6 +111,14 @@ final class ControllerManager: ObservableObject {
     private func activeGCController() -> GCController? {
         guard let activeController else { return nil }
         return controllerRefs[activeController.id]
+    }
+
+    private func resetTransientState(releaseModifiers: Bool) {
+        pressed.removeAll()
+        wisprHeldButton = nil
+        if releaseModifiers {
+            keySender.releaseAllModifiers()
+        }
     }
 
     private func attachHandlers() {

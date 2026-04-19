@@ -15,53 +15,57 @@ struct ControllerVisualView: View {
         controllerType.buttonProvider(for: viewSide)
     }
 
-    private var viewBox: CGRect {
+    private var viewBox: CGRect? {
         controllerType.viewBox(for: viewSide)
     }
 
+    private var backgroundResourceName: String? {
+        controllerType.svgResourceName(for: viewSide)
+    }
+
     var body: some View {
-        GeometryReader { geo in
-            let scale = calculateScale(for: geo.size, viewBox: viewBox)
-            let scaledSize = CGSize(
-                width: viewBox.width * scale,
-                height: viewBox.height * scale
-            )
-            let transform = CGAffineTransform(scaleX: scale, y: scale)
-                .translatedBy(x: -viewBox.origin.x, y: -viewBox.origin.y)
-
-            ZStack(alignment: .topLeading) {
-                // Background SVG image
-                ControllerBackground(
-                    resourceName: controllerType.svgResourceName(for: viewSide),
-                    size: scaledSize
-                )
-
-                // Button overlays using Canvas for precise coordinate control
-                if let buttonProvider {
-                    ButtonOverlayCanvas(
-                        buttons: buttonProvider.buttons,
-                        transform: transform,
-                        pressed: pressed,
-                        hoveredButton: hoveredButton,
-                        getAction: getAction
+        Group {
+            if let viewBox, let backgroundResourceName, let buttonProvider {
+                GeometryReader { geo in
+                    let scale = calculateScale(for: geo.size, viewBox: viewBox)
+                    let scaledSize = CGSize(
+                        width: viewBox.width * scale,
+                        height: viewBox.height * scale
                     )
-                    .frame(width: scaledSize.width, height: scaledSize.height)
+                    let transform = CGAffineTransform(scaleX: scale, y: scale)
+                        .translatedBy(x: -viewBox.origin.x, y: -viewBox.origin.y)
 
-                    // Invisible hit testing layer
-                    ButtonHitTestLayer(
-                        buttons: buttonProvider.buttons,
-                        transform: transform,
-                        hitTestStrokeWidth: viewSide == .back ? 0 : 14,
-                        flipInputY: viewSide == .back,
-                        hoveredButton: $hoveredButton,
-                        onEditButton: onEditButton,
-                        getAction: getAction
-                    )
+                    ZStack(alignment: .topLeading) {
+                        ControllerBackground(
+                            resourceName: backgroundResourceName,
+                            size: scaledSize
+                        )
+
+                        ButtonOverlayCanvas(
+                            buttons: buttonProvider.buttons,
+                            transform: transform,
+                            pressed: pressed,
+                            hoveredButton: hoveredButton,
+                            getAction: getAction
+                        )
+                        .frame(width: scaledSize.width, height: scaledSize.height)
+
+                        ButtonHitTestLayer(
+                            buttons: buttonProvider.buttons,
+                            transform: transform,
+                            hitTestStrokeWidth: viewSide == .back ? 0 : 22,
+                            hoveredButton: $hoveredButton,
+                            onEditButton: onEditButton,
+                            getAction: getAction
+                        )
+                        .frame(width: scaledSize.width, height: scaledSize.height)
+                    }
                     .frame(width: scaledSize.width, height: scaledSize.height)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
+            } else {
+                UnsupportedControllerVisual(controllerType: controllerType)
             }
-            .frame(width: scaledSize.width, height: scaledSize.height)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .onChange(of: viewSide) { _ in
             hoveredButton = nil
@@ -70,6 +74,26 @@ struct ControllerVisualView: View {
 
     private func calculateScale(for size: CGSize, viewBox: CGRect) -> CGFloat {
         return min(size.width / viewBox.width, size.height / viewBox.height)
+    }
+}
+
+private struct UnsupportedControllerVisual: View {
+    let controllerType: ControllerType
+
+    var body: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "gamecontroller")
+                .font(.system(size: 36))
+                .foregroundStyle(.secondary)
+            Text("\(controllerType.displayName) visual editor unavailable")
+                .font(.headline)
+            Text("Use the Keybinds tab to edit mappings while this controller is connected.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 320)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 
@@ -136,7 +160,6 @@ private struct ButtonHitTestLayer: View {
     let buttons: [String: ControllerButton]
     let transform: CGAffineTransform
     let hitTestStrokeWidth: CGFloat
-    let flipInputY: Bool
     @Binding var hoveredButton: String?
     let onEditButton: ((String) -> Void)?
     let getAction: (String) -> CCActionDef?
@@ -154,13 +177,13 @@ private struct ButtonHitTestLayer: View {
                 .onContinuousHover(coordinateSpace: .local) { phase in
                     switch phase {
                     case .active(let location):
-                        updateHover(at: adjustedPoint(location, in: geo.size))
+                        updateHover(at: location)
                     case .ended:
                         hoveredButton = nil
                     }
                 }
                 .onTapGesture(coordinateSpace: .local) { location in
-                    handleTap(at: adjustedPoint(location, in: geo.size))
+                    handleTap(at: location)
                 }
                 .overlay {
                     // Tooltip for hovered button
@@ -181,11 +204,6 @@ private struct ButtonHitTestLayer: View {
                     computeHitTestCache()
                 }
         }
-    }
-
-    private func adjustedPoint(_ point: CGPoint, in size: CGSize) -> CGPoint {
-        guard flipInputY else { return point }
-        return CGPoint(x: point.x, y: size.height - point.y)
     }
 
     private func computeHitTestCache() {

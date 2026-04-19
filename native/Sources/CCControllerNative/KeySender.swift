@@ -8,12 +8,19 @@ final class KeySender: @unchecked Sendable {
     private var heldModifiers: Set<String> = []
 
     func sendKeystroke(key: String, modifiers: [String]?) -> Bool {
-        guard let code = Self.keyCode(for: key) else { return false }
+        let normalized = key.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let code = Self.keyCode(for: key) else {
+            Logger.shared.warning("Unsupported key mapping: \(normalized)")
+            return false
+        }
         let flags = Self.flags(from: modifiers)
 
         guard let down = CGEvent(keyboardEventSource: source, virtualKey: code, keyDown: true),
               let up = CGEvent(keyboardEventSource: source, virtualKey: code, keyDown: false)
-        else { return false }
+        else {
+            Logger.shared.error("Failed to create keyboard events for key: \(normalized)")
+            return false
+        }
 
         down.flags = flags
         up.flags = flags
@@ -119,8 +126,10 @@ final class KeySender: @unchecked Sendable {
             return CGKeyCode(kVK_Escape)
         case "tab":
             return CGKeyCode(kVK_Tab)
-        case "space":
+        case "space", "spacebar":
             return CGKeyCode(kVK_Space)
+        case "capslock", "caps_lock":
+            return CGKeyCode(kVK_CapsLock)
         case "backspace", "delete":
             return CGKeyCode(kVK_Delete)
         // Arrow keys
@@ -170,6 +179,28 @@ final class KeySender: @unchecked Sendable {
             return CGKeyCode(kVK_F11)
         case "f12":
             return CGKeyCode(kVK_F12)
+        case "comma":
+            return CGKeyCode(kVK_ANSI_Comma)
+        case "period", "dot":
+            return CGKeyCode(kVK_ANSI_Period)
+        case "slash", "forward_slash", "forwardslash":
+            return CGKeyCode(kVK_ANSI_Slash)
+        case "semicolon":
+            return CGKeyCode(kVK_ANSI_Semicolon)
+        case "quote", "apostrophe":
+            return CGKeyCode(kVK_ANSI_Quote)
+        case "minus", "hyphen":
+            return CGKeyCode(kVK_ANSI_Minus)
+        case "equal", "equals":
+            return CGKeyCode(kVK_ANSI_Equal)
+        case "grave", "backtick", "backquote":
+            return CGKeyCode(kVK_ANSI_Grave)
+        case "backslash":
+            return CGKeyCode(kVK_ANSI_Backslash)
+        case "left_bracket", "leftbracket":
+            return CGKeyCode(kVK_ANSI_LeftBracket)
+        case "right_bracket", "rightbracket":
+            return CGKeyCode(kVK_ANSI_RightBracket)
         default:
             break
         }
@@ -262,4 +293,3 @@ final class KeySender: @unchecked Sendable {
         }
     }
 }
-
