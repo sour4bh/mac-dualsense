@@ -1,4 +1,4 @@
-APP_NAME := CC Controller Native
+APP_NAME := mac-dualsense
 BUILT_APP := native/dist/$(APP_NAME).app
 INSTALLED_APP := /Applications/$(APP_NAME).app
 

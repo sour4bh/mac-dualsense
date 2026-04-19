@@ -4,13 +4,13 @@ final class Logger: @unchecked Sendable {
     static let shared = Logger()
 
     private let logFile: URL
-    private let queue = DispatchQueue(label: "cc-controller.logger", qos: .utility)
+    private let queue = DispatchQueue(label: "mac-dualsense.logger", qos: .utility)
     private let dateFormatter: DateFormatter
 
     private init() {
         let logsDir = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Logs", isDirectory: true)
-        logFile = logsDir.appendingPathComponent("cc-controller.log", isDirectory: false)
+        logFile = logsDir.appendingPathComponent("mac-dualsense.log", isDirectory: false)
         dateFormatter = DateFormatter()
         dateFormatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
 
@@ -36,7 +36,7 @@ final class Logger: @unchecked Sendable {
 
     private func log(_ level: String, _ message: String) {
         let timestamp = dateFormatter.string(from: Date())
-        let line = "\(timestamp) \(level) CCControllerNative: \(message)\n"
+        let line = "\(timestamp) \(level) MacDualSense: \(message)\n"
 
         queue.async { [logFile] in
             guard let data = line.data(using: .utf8) else { return }

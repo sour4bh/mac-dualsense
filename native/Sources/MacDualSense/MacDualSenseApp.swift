@@ -2,13 +2,13 @@ import AppKit
 import SwiftUI
 
 @main
-struct CCControllerNativeApp: App {
+struct MacDualSenseApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
     @StateObject private var appState = AppState()
 
     var body: some Scene {
-        MenuBarExtra("CC Controller", systemImage: "gamecontroller") {
+        MenuBarExtra("mac-dualsense", systemImage: "gamecontroller") {
             MenuView(appState: appState)
         }
         .menuBarExtraStyle(.window)

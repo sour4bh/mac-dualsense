@@ -1,13 +1,13 @@
 # Repository Guidelines
 
-CC Controller maps game-controller inputs (DualSense / Pro Controller) to macOS keyboard shortcuts, with per-app contexts and profiles. This repo is a native Swift menu bar app that uses a YAML config file.
+mac-dualsense maps game-controller inputs (DualSense / Pro Controller) to macOS keyboard shortcuts, with per-app contexts and profiles. This repo is a native Swift menu bar app that uses a YAML config file.
 
 ## Project Structure & Module Organization
 
 - `native/`: SwiftUI + `GameController` app.
-  - `Sources/CCControllerNative/`: menu bar app, preferences, YAML editor, live input.
+  - `Sources/MacDualSense/`: menu bar app, preferences, YAML editor, live input.
   - `scripts/`: `build_app.sh`, `install_app.sh`.
-- Default config: `native/Sources/CCControllerNative/Resources/mappings.yaml` (seeded on first run to `~/Library/Application Support/cc-controller/mappings.yaml`).
+- Default config: `native/Sources/MacDualSense/Resources/mappings.yaml` (seeded on first run to `~/Library/Application Support/mac-dualsense/mappings.yaml`).
 
 ## Build, Test, and Development Commands
 
@@ -20,7 +20,7 @@ CC Controller maps game-controller inputs (DualSense / Pro Controller) to macOS 
 - Names: modules/functions `snake_case`, classes `PascalCase`, constants `UPPER_SNAKE_CASE`.
 - `mappings.yaml` conventions:
   - Buttons use canonical names (e.g., `dpad_up`, `l1`, `cross`).
-  - Context keys match `native/Sources/CCControllerNative/AppFocus.swift` (e.g., `warp`, `arc`, `chrome`).
+  - Context keys match `native/Sources/MacDualSense/AppFocus.swift` (e.g., `warp`, `arc`, `chrome`).
 
 ## Testing Guidelines
 
@@ -29,7 +29,7 @@ CC Controller maps game-controller inputs (DualSense / Pro Controller) to macOS 
 ## Commit & Pull Request Guidelines
 
 - Prefer short, imperative subjects; conventional prefixes are welcome (`feat:`, `fix:`) as used in history.
-- PRs should include: what changed, how you tested on macOS (controller + target app), and any updates to `native/Sources/CCControllerNative/Resources/mappings.yaml` or bundle IDs in `native/Sources/CCControllerNative/AppFocus.swift`.
+- PRs should include: what changed, how you tested on macOS (controller + target app), and any updates to `native/Sources/MacDualSense/Resources/mappings.yaml` or bundle IDs in `native/Sources/MacDualSense/AppFocus.swift`.
 
 ## Security & Configuration Notes
 

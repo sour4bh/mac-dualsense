@@ -47,7 +47,7 @@ final class ConfigStore: ObservableObject {
 
     init() {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        appSupportDir = base.appendingPathComponent("cc-controller", isDirectory: true)
+        appSupportDir = base.appendingPathComponent("mac-dualsense", isDirectory: true)
         configURL = appSupportDir.appendingPathComponent("mappings.yaml", isDirectory: false)
 
         loadOrSeed()

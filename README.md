@@ -28,9 +28,9 @@ Mappings switch automatically when you change the focused app.
 ### Download
 
 1. Grab the latest `.zip` from [**Releases →**](../../releases/latest)
-2. Drag **CC Controller Native.app** to `/Applications`
+2. Drag **mac-dualsense.app** to `/Applications`
 3. Launch — a controller icon appears in the menu bar
-4. System Settings → Privacy & Security → Accessibility → enable **CC Controller Native**
+4. System Settings → Privacy & Security → Accessibility → enable **mac-dualsense**
 
 > macOS Gatekeeper warning on first launch: right-click the app → Open → Open.
 
@@ -51,7 +51,7 @@ This builds, installs to `/Applications`, and launches.
 1. Connect your DualSense via USB or Bluetooth
 2. Open the app — it auto-detects the controller
 3. The default config works immediately (D-pad, face buttons, shoulder buttons all mapped)
-4. Edit `~/Library/Application Support/cc-controller/mappings.yaml` to customize — the app hot-reloads on save
+4. Edit `~/Library/Application Support/mac-dualsense/mappings.yaml` to customize — the app hot-reloads on save
 
 ## Wispr voice dictation
 
@@ -107,13 +107,13 @@ Set `settings.wispr.mode` in your config to switch modes.
 <details>
 <summary>Per-app overrides (Warp, Arc, Chrome, Slack, ChatGPT, Claude)</summary>
 
-Full bindings in [`native/Sources/CCControllerNative/Resources/mappings.yaml`](native/Sources/CCControllerNative/Resources/mappings.yaml).
+Full bindings in [`native/Sources/MacDualSense/Resources/mappings.yaml`](native/Sources/MacDualSense/Resources/mappings.yaml).
 
 </details>
 
 ## Configuration reference
 
-Config lives at `~/Library/Application Support/cc-controller/mappings.yaml`, seeded from `native/Sources/CCControllerNative/Resources/mappings.yaml` on first run.
+Config lives at `~/Library/Application Support/mac-dualsense/mappings.yaml`, seeded from `native/Sources/MacDualSense/Resources/mappings.yaml` on first run.
 
 <details>
 <summary>Full config structure</summary>

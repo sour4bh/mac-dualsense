@@ -2,19 +2,19 @@
 import PackageDescription
 
 let package = Package(
-    name: "CCControllerNative",
+    name: "MacDualSense",
     platforms: [
         .macOS(.v13),
     ],
     products: [
-        .executable(name: "CCControllerNative", targets: ["CCControllerNative"])
+        .executable(name: "MacDualSense", targets: ["MacDualSense"])
     ],
     dependencies: [
         .package(url: "https://github.com/jpsim/Yams.git", from: "5.1.0")
     ],
     targets: [
         .executableTarget(
-            name: "CCControllerNative",
+            name: "MacDualSense",
             dependencies: [
                 "Yams"
             ],

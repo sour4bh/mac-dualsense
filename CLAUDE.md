@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-CC Controller is a native macOS menu bar app (SwiftUI + GameController framework) that maps game controller inputs (DualSense / Pro Controller) to keyboard shortcuts with per-app contexts and profiles.
+mac-dualsense is a native macOS menu bar app (SwiftUI + GameController framework) that maps game controller inputs (DualSense / Pro Controller) to keyboard shortcuts with per-app contexts and profiles.
 
 ## Commands
 
@@ -32,9 +32,9 @@ GCController → button handler → canonicalButton() → ConfigStore.resolve(bu
                                                     AppFocus.context() (bundle ID → context name)
 ```
 
-### Key Files (`native/Sources/CCControllerNative/`)
+### Key Files (`native/Sources/MacDualSense/`)
 
-- `CCControllerNativeApp.swift` — SwiftUI app entry, menu bar setup
+- `MacDualSenseApp.swift` — SwiftUI app entry, menu bar setup
 - `ControllerManager.swift` — GameController framework integration; `canonicalButton()` maps GCInput names to config button names; handles button press/release events and dispatches actions
 - `ConfigStore.swift` — YAML config loading/saving via Yams; `resolve(button:)` returns action based on current app context and active profile
 - `KeySender.swift` — CGEvent keystroke injection; `sendKeystroke()`, `setModifier()`, `toggleModifier()`, `holdModifier()`
@@ -43,9 +43,9 @@ GCController → button handler → canonicalButton() → ConfigStore.resolve(bu
 - `Models.swift` — Codable structs for YAML config (`CCConfig`, `CCActionDef`, etc.)
 - `PreferencesView.swift` — Settings UI for profiles, mappings, controller selection
 
-### Config (`~/Library/Application Support/cc-controller/mappings.yaml`)
+### Config (`~/Library/Application Support/mac-dualsense/mappings.yaml`)
 
-Seeded on first run from `native/Sources/CCControllerNative/Resources/mappings.yaml`.
+Seeded on first run from `native/Sources/MacDualSense/Resources/mappings.yaml`.
 
 Structure:
 - `settings.controller.preferred` — `auto`, `dualsense`, or `pro_controller`
@@ -76,4 +76,4 @@ No formal test suite. Validate changes by building and running the app, connecti
 
 ## Permissions
 
-Requires macOS Accessibility permission: System Settings → Privacy & Security → Accessibility → enable **CC Controller Native**
+Requires macOS Accessibility permission: System Settings → Privacy & Security → Accessibility → enable **mac-dualsense**

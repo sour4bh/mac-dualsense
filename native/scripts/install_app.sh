@@ -5,7 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 "${ROOT_DIR}/scripts/build_app.sh"
 
-APP_NAME="CC Controller Native"
+APP_NAME="mac-dualsense"
 SRC_APP="${ROOT_DIR}/dist/${APP_NAME}.app"
 DST_APP="/Applications/${APP_NAME}.app"
 

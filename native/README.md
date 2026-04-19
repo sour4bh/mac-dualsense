@@ -1,11 +1,11 @@
-# CC Controller (Native Swift rewrite)
+# mac-dualsense (Native Swift implementation)
 
 This folder contains the native SwiftUI + GameController implementation intended for easier distribution (no Homebrew `hidapi` dependency).
 
 ## Build & Run
 
 - Build (debug): `swift build --package-path native`
-- Run from Xcode: open `native/Package.swift` in Xcode and press Run, or run the built binary from `native/.build/.../debug/CCControllerNative`.
+- Run from Xcode: open `native/Package.swift` in Xcode and press Run, or run the built binary from `native/.build/.../debug/MacDualSense`.
 
 ## Create a `.app` and Install
 
@@ -14,12 +14,12 @@ This folder contains the native SwiftUI + GameController implementation intended
 
 ## Configuration
 
-- User config path: `~/Library/Application Support/cc-controller/mappings.yaml`
-- First run will seed the file from `native/Sources/CCControllerNative/Resources/mappings.yaml` if missing.
+- User config path: `~/Library/Application Support/mac-dualsense/mappings.yaml`
+- First run will seed the file from `native/Sources/MacDualSense/Resources/mappings.yaml` if missing.
   - Includes per-app contexts (Warp/Arc/Chrome/Slack/ChatGPT/Claude) and haptics patterns.
 
 ## Permissions
 
-CC Controller injects keystrokes via `CGEvent` and requires:
+mac-dualsense injects keystrokes via `CGEvent` and requires:
 
-- System Settings → Privacy & Security → Accessibility → enable **CC Controller Native**
+- System Settings → Privacy & Security → Accessibility → enable **mac-dualsense**
