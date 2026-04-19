@@ -45,7 +45,6 @@ struct ControllerPreferencesView: View {
     @ObservedObject var configStore: ConfigStore
 
     @State private var editingButton: String? = nil
-    @State private var viewSide: ControllerViewSide = .front
 
     init(appState: AppState) {
         self.appState = appState
@@ -66,19 +65,19 @@ struct ControllerPreferencesView: View {
             ? "Click a button to edit its binding"
             : "Use the Keybinds tab to edit mappings for this controller."
 
-        VStack(alignment: .leading, spacing: 16) {
-            HStack {
-                Text("Controller")
-                    .font(.largeTitle.weight(.semibold))
-                Spacer()
-                Button("Save") {
-                    configStore.save()
+        ScrollView(.vertical) {
+            VStack(alignment: .leading, spacing: 20) {
+                HStack {
+                    Text("Controller")
+                        .font(.largeTitle.weight(.semibold))
+                    Spacer()
+                    Button("Save") {
+                        configStore.save()
+                    }
+                    .keyboardShortcut("s", modifiers: [.command])
                 }
-                .keyboardShortcut("s", modifiers: [.command])
-            }
 
-            HStack(alignment: .top, spacing: 24) {
-                VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .firstTextBaseline, spacing: 16) {
                     Picker("Preferred", selection: Binding(
                         get: { configStore.preferredController() },
                         set: { configStore.setPreferredController($0) }
@@ -87,7 +86,7 @@ struct ControllerPreferencesView: View {
                         Text("DualSense").tag("dualsense")
                         Text("Pro Controller").tag("pro_controller")
                     }
-                    .frame(maxWidth: .infinity)
+                    .frame(maxWidth: 240)
 
                     Picker("Active", selection: Binding(
                         get: { controllerManager.activeController?.id ?? "" },
@@ -98,48 +97,49 @@ struct ControllerPreferencesView: View {
                             Text(c.vendor != nil ? "\(c.name) (\(c.vendor!))" : c.name).tag(c.id)
                         }
                     }
-                    .frame(maxWidth: .infinity)
+                    .frame(maxWidth: 280)
 
+                    Spacer(minLength: 0)
+                }
+
+                HStack(alignment: .firstTextBaseline, spacing: 12) {
+                    Text(viewInstruction)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Spacer(minLength: 8)
                     Text(liveInputSummary)
                         .foregroundStyle(.secondary)
                         .monospaced()
                         .font(.system(size: 12))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
                 }
-                .frame(width: 260)
 
-                VStack(alignment: .leading, spacing: 12) {
-                    if availableViews.count > 1 {
-                        Picker("View", selection: $viewSide) {
-                            ForEach(availableViews) { view in
-                                Text(view.label).tag(view)
+                ForEach(availableViews) { side in
+                    VStack(alignment: .leading, spacing: 6) {
+                        if availableViews.count > 1 {
+                            Text(side.label)
+                                .font(.caption2.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                                .textCase(.uppercase)
+                        }
+                        ControllerVisualView(
+                            controllerType: controllerType,
+                            viewSide: side,
+                            pressed: controllerManager.pressed,
+                            getAction: { configStore.resolve(button: $0) },
+                            onEditButton: { button in
+                                editingButton = button
                             }
-                        }
-                        .pickerStyle(.segmented)
-                        .frame(width: 220)
+                        )
+                        .aspectRatio(aspectRatio(for: side), contentMode: .fit)
+                        .frame(maxWidth: .infinity)
                     }
-
-                    Text(viewInstruction)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-
-                    ControllerVisualView(
-                        controllerType: controllerType,
-                        viewSide: viewSide,
-                        pressed: controllerManager.pressed,
-                        getAction: { configStore.resolve(button: $0) },
-                        onEditButton: { button in
-                            editingButton = button
-                        }
-                    )
-                    .frame(maxWidth: .infinity, minHeight: 500)
                 }
             }
-        }
-        .padding(20)
-        .onChange(of: controllerType) { newType in
-            if !newType.availableViews.contains(viewSide) {
-                viewSide = .front
-            }
+            .padding(20)
+            .frame(maxWidth: 720, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
         }
         .popover(item: $editingButton) { button in
             ButtonBindingEditor(
@@ -174,6 +174,13 @@ struct ControllerPreferencesView: View {
             return "Last: \(last)  •  Down: \(down.isEmpty ? "—" : down)"
         }
         return "—"
+    }
+
+    private func aspectRatio(for side: ControllerViewSide) -> CGFloat {
+        if let box = controllerType.viewBox(for: side), box.height > 0 {
+            return box.width / box.height
+        }
+        return 590.0 / 410.0
     }
 }
 
