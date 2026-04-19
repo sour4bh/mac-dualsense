@@ -1,7 +1,7 @@
 import SwiftUI
 import OSLog
 
-private let svgLogger = os.Logger(subsystem: "com.sour4bh.cc-controller", category: "SVGPathParser")
+private let svgLogger = os.Logger(subsystem: "com.sour4bh.mac-dualsense", category: "SVGPathParser")
 
 /// Parses SVG path `d` attribute into SwiftUI Path
 struct SVGPathParser {

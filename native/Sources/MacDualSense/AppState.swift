@@ -2,7 +2,7 @@ import Foundation
 
 @MainActor
 final class AppState: ObservableObject {
-    private static let isEnabledDefaultsKey = "cc-controller.is-enabled"
+    private static let isEnabledDefaultsKey = "mac-dualsense.is-enabled"
 
     @Published var isEnabled: Bool {
         didSet {
