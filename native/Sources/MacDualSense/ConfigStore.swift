@@ -26,7 +26,7 @@ final class ConfigStore: ObservableObject {
         }
     }
 
-    @Published private(set) var config: CCConfig = .init()
+    @Published private(set) var config: Config = .init()
 
     private let appSupportDir: URL
     private let configURL: URL
@@ -71,7 +71,7 @@ final class ConfigStore: ObservableObject {
         do {
             let yaml = try String(contentsOf: configURL, encoding: .utf8)
             let decoder = YAMLDecoder()
-            config = try decoder.decode(CCConfig.self, from: yaml)
+            config = try decoder.decode(Config.self, from: yaml)
             normalize()
             appFocus.cacheTTLms = config.settings.appFocusCacheTtlMs ?? 100
         } catch {
@@ -106,7 +106,7 @@ final class ConfigStore: ObservableObject {
         NSWorkspace.shared.activateFileViewerSelecting([configURL])
     }
 
-    func resolve(button: String) -> CCActionDef? {
+    func resolve(button: String) -> ActionDef? {
         let context = appFocus.context()
         let profileName = config.profiles.active
         guard let profile = config.profiles.items[profileName] else { return nil }
@@ -137,7 +137,7 @@ final class ConfigStore: ObservableObject {
 
         let sourceName = cloneFrom ?? config.profiles.active
         let sourceMappings = config.profiles.items[sourceName]?.mappings ?? ["default": [:]]
-        config.profiles.items[trimmed] = CCProfileItem(mappings: sourceMappings)
+        config.profiles.items[trimmed] = ProfileItem(mappings: sourceMappings)
         autosave()
     }
 
@@ -151,7 +151,7 @@ final class ConfigStore: ObservableObject {
             candidate = "\(base) \(n)"
             n += 1
         }
-        config.profiles.items[candidate] = CCProfileItem(mappings: src.mappings)
+        config.profiles.items[candidate] = ProfileItem(mappings: src.mappings)
         autosave()
         return candidate
     }
@@ -201,14 +201,14 @@ final class ConfigStore: ObservableObject {
         return map.keys.sorted()
     }
 
-    func action(profile: String, context: String, button: String) -> CCActionDef? {
+    func action(profile: String, context: String, button: String) -> ActionDef? {
         config.profiles.items[profile]?.mappings[context]?[button]
     }
 
-    func setAction(profile: String, context: String, button: String, action: CCActionDef) {
+    func setAction(profile: String, context: String, button: String, action: ActionDef) {
         guard !button.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
 
-        var profileItem = config.profiles.items[profile] ?? CCProfileItem()
+        var profileItem = config.profiles.items[profile] ?? ProfileItem()
         var ctx = profileItem.mappings[context] ?? [:]
         ctx[button] = action
         profileItem.mappings[context] = ctx
@@ -266,7 +266,7 @@ final class ConfigStore: ObservableObject {
         autosave()
     }
 
-    func wisprSettings() -> CCWisprSettings {
+    func wisprSettings() -> WisprSettings {
         config.settings.wispr ?? .init()
     }
 
@@ -323,7 +323,7 @@ final class ConfigStore: ObservableObject {
             let profileDefault = config.profiles.items["default"]?.mappings["default"] ?? [:]
             let looksEmpty = config.profiles.items.count == 1 && profileDefault.isEmpty
             if looksEmpty {
-                config.profiles.items["default"] = CCProfileItem(mappings: legacy)
+                config.profiles.items["default"] = ProfileItem(mappings: legacy)
                 config.profiles.active = "default"
                 config.mappings = nil
             }

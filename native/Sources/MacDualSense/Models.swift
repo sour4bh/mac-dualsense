@@ -1,18 +1,18 @@
 import Foundation
 
-struct CCConfig: Codable {
+struct Config: Codable {
     var version: Int = 2
-    var settings: CCSettings = .init()
-    var profiles: CCProfiles = .init()
-    var mappings: [String: [String: CCActionDef]]? = nil // legacy (pre-profiles)
-    var haptics: CCHaptics? = nil
+    var settings: Settings = .init()
+    var profiles: Profiles = .init()
+    var mappings: [String: [String: ActionDef]]? = nil // legacy (pre-profiles)
+    var haptics: Haptics? = nil
 }
 
-struct CCSettings: Codable {
+struct Settings: Codable {
     var pollIntervalMs: Int? = 10
     var appFocusCacheTtlMs: Int? = 100
-    var controller: CCControllerSettings? = .init()
-    var wispr: CCWisprSettings? = .init()
+    var controller: ControllerSettings? = .init()
+    var wispr: WisprSettings? = .init()
 
     enum CodingKeys: String, CodingKey {
         case pollIntervalMs = "poll_interval_ms"
@@ -22,11 +22,11 @@ struct CCSettings: Codable {
     }
 }
 
-struct CCControllerSettings: Codable {
+struct ControllerSettings: Codable {
     var preferred: String? = "auto" // auto, dualsense, pro_controller
 }
 
-struct CCWisprSettings: Codable {
+struct WisprSettings: Codable {
     var mode: String? = "rcmd_hold" // rcmd_hold, lcmd_hold, cmd_right (legacy)
     var holdMs: Int? = 450
 
@@ -36,22 +36,22 @@ struct CCWisprSettings: Codable {
     }
 }
 
-struct CCProfiles: Codable {
+struct Profiles: Codable {
     var active: String = "default"
-    var items: [String: CCProfileItem] = ["default": .init()]
+    var items: [String: ProfileItem] = ["default": .init()]
 }
 
-struct CCProfileItem: Codable {
-    var mappings: [String: [String: CCActionDef]] = ["default": [:]]
+struct ProfileItem: Codable {
+    var mappings: [String: [String: ActionDef]] = ["default": [:]]
 }
 
-struct CCActionDef: Codable, Hashable {
+struct ActionDef: Codable, Hashable {
     var type: String = "noop" // keystroke, wispr, noop
     var key: String? = nil
     var modifiers: [String]? = nil
 }
 
-struct CCHaptics: Codable {
+struct Haptics: Codable {
     var enabled: Bool? = true
     var patterns: [String: CCHapticPattern]? = nil
 }

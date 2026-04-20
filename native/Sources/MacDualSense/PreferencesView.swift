@@ -147,7 +147,7 @@ struct ControllerPreferencesView: View {
                 action: Binding(
                     get: {
                         configStore.action(profile: activeProfile, context: context, button: button)
-                            ?? CCActionDef(type: "noop", key: nil, modifiers: nil)
+                            ?? ActionDef(type: "noop", key: nil, modifiers: nil)
                     },
                     set: { updated in
                         configStore.setAction(
@@ -398,7 +398,7 @@ struct KeybindsPreferencesView: View {
                         message: "Button name (e.g. cross, dpad_up):"
                     )
                     guard let btn else { return }
-                    let action = CCActionDef(type: "keystroke", key: "return", modifiers: nil)
+                    let action = ActionDef(type: "keystroke", key: "return", modifiers: nil)
                     store.setAction(profile: editingProfile, context: editingContext, button: btn, action: action)
                     selectedButton = btn
                 } label: {
@@ -418,7 +418,7 @@ struct KeybindsPreferencesView: View {
                         action: Binding(
                             get: {
                                 store.action(profile: editingProfile, context: editingContext, button: button)
-                                    ?? CCActionDef(type: "noop", key: nil, modifiers: nil)
+                                    ?? ActionDef(type: "noop", key: nil, modifiers: nil)
                             },
                             set: { updated in
                                 store.setAction(
@@ -458,7 +458,7 @@ struct KeybindsPreferencesView: View {
             let btn = event.button
 
             if store.action(profile: editingProfile, context: editingContext, button: btn) == nil {
-                let action = CCActionDef(type: "keystroke", key: "return", modifiers: nil)
+                let action = ActionDef(type: "keystroke", key: "return", modifiers: nil)
                 store.setAction(profile: editingProfile, context: editingContext, button: btn, action: action)
             }
             selectedButton = btn
@@ -476,7 +476,7 @@ struct KeybindsPreferencesView: View {
 
 private struct KeybindRow: View {
     let button: String
-    @Binding var action: CCActionDef
+    @Binding var action: ActionDef
     let onDelete: () -> Void
 
     @State private var keyText: String
@@ -484,7 +484,7 @@ private struct KeybindRow: View {
 
     init(
         button: String,
-        action: Binding<CCActionDef>,
+        action: Binding<ActionDef>,
         onDelete: @escaping () -> Void
     ) {
         self.button = button

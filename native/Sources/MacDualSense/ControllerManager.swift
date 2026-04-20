@@ -25,7 +25,7 @@ final class ControllerManager: ObservableObject {
 
     var isEnabled: (() -> Bool)?
     var preferredController: (() -> String)?
-    var resolveAction: ((String) -> CCActionDef?)?
+    var resolveAction: ((String) -> ActionDef?)?
     var accessibilityPrompt: (() -> Void)?
     var wisprMode: (() -> String)?
     var wisprHoldMs: (() -> Int)?
@@ -305,7 +305,7 @@ final class ControllerManager: ObservableObject {
         haptics.play(controller: activeGCController(), enabled: enabled, pattern: pattern, fallback: fallback)
     }
 
-    private func summarize(_ action: CCActionDef?) -> String {
+    private func summarize(_ action: ActionDef?) -> String {
         guard let action else { return "No action" }
         switch action.type.lowercased() {
         case "wispr":

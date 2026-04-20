@@ -194,7 +194,7 @@ struct ControllerButton {
 // MARK: - Action Formatter
 
 enum ActionFormatter {
-    static func format(_ action: CCActionDef?) -> String {
+    static func format(_ action: ActionDef?) -> String {
         guard let action else { return "Click to bind" }
 
         switch action.type.lowercased() {

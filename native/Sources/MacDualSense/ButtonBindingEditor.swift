@@ -2,7 +2,7 @@ import SwiftUI
 
 struct ButtonBindingEditor: View {
     let button: String
-    @Binding var action: CCActionDef
+    @Binding var action: ActionDef
     let onDelete: () -> Void
     let onDismiss: () -> Void
 
@@ -11,7 +11,7 @@ struct ButtonBindingEditor: View {
 
     init(
         button: String,
-        action: Binding<CCActionDef>,
+        action: Binding<ActionDef>,
         onDelete: @escaping () -> Void,
         onDismiss: @escaping () -> Void
     ) {

@@ -6,7 +6,7 @@ struct ControllerVisualView: View {
     let controllerType: ControllerType
     let viewSide: ControllerViewSide
     let pressed: Set<String>
-    let getAction: (String) -> CCActionDef?
+    let getAction: (String) -> ActionDef?
     let onEditButton: ((String) -> Void)?
 
     @State private var hoveredButton: String?
@@ -130,7 +130,7 @@ private struct ButtonOverlayCanvas: View {
     let transform: CGAffineTransform
     let pressed: Set<String>
     let hoveredButton: String?
-    let getAction: (String) -> CCActionDef?
+    let getAction: (String) -> ActionDef?
 
     var body: some View {
         Canvas { context, size in
@@ -162,7 +162,7 @@ private struct ButtonHitTestLayer: View {
     let hitTestStrokeWidth: CGFloat
     @Binding var hoveredButton: String?
     let onEditButton: ((String) -> Void)?
-    let getAction: (String) -> CCActionDef?
+    let getAction: (String) -> ActionDef?
 
     // Cached hit test data
     @State private var sortedButtonIds: [String] = []
@@ -276,7 +276,7 @@ private struct ButtonHitTestLayer: View {
 
 private struct ButtonTooltip: View {
     let label: String
-    let action: CCActionDef?
+    let action: ActionDef?
 
     var body: some View {
         VStack(spacing: 2) {
