@@ -31,11 +31,16 @@ final class ControllerManager: ObservableObject {
     var wisprHoldMs: (() -> Int)?
     var hapticsEnabled: (() -> Bool)?
     var hapticPattern: ((String) -> CCHapticPattern?)?
+    var trackpadEnabled: (() -> Bool)?
+    var trackpadSettings: (() -> TrackpadSettings)?
 
     private let keySender = KeySender()
+    private let mouseSender = MouseSender()
     private let haptics = ControllerHaptics()
     private var wisprHeldButton: String? = nil
     private var controllerRefs: [String: GCController] = [:]
+    private var lastPrimary: (x: Double, y: Double)? = nil
+    private var lastSecondary: (x: Double, y: Double)? = nil
 
     init() {
         NotificationCenter.default.addObserver(
@@ -57,6 +62,7 @@ final class ControllerManager: ObservableObject {
     deinit {
         NotificationCenter.default.removeObserver(self)
         keySender.releaseAllModifiers()
+        mouseSender.releaseAllButtons()
     }
 
     func setActiveController(id: String?) {
@@ -116,9 +122,16 @@ final class ControllerManager: ObservableObject {
     private func resetTransientState(releaseModifiers: Bool) {
         pressed.removeAll()
         wisprHeldButton = nil
+        releaseTrackpadState()
         if releaseModifiers {
             keySender.releaseAllModifiers()
         }
+    }
+
+    private func releaseTrackpadState() {
+        lastPrimary = nil
+        lastSecondary = nil
+        mouseSender.releaseAllButtons()
     }
 
     private func attachHandlers() {
@@ -148,6 +161,25 @@ final class ControllerManager: ObservableObject {
                 }
                 dpad.right.pressedChangedHandler = { [weak self] _, _, pressed in
                     Task { @MainActor in self?.handle(controllerID: id, buttonName: "dpad_right", pressed: pressed) }
+                }
+            }
+
+            if let ds = profile as? GCDualSenseGamepad {
+                Logger.shared.info("  DualSense detected, attaching continuous touchpad handlers")
+                ds.touchpadPrimary.valueChangedHandler = { [weak self] _, x, y in
+                    Task { @MainActor in
+                        self?.handleTouchpadPrimary(controllerID: id, x: Double(x), y: Double(y))
+                    }
+                }
+                ds.touchpadSecondary.valueChangedHandler = { [weak self] _, x, y in
+                    Task { @MainActor in
+                        self?.handleTouchpadSecondary(controllerID: id, x: Double(x), y: Double(y))
+                    }
+                }
+                ds.touchpadButton.pressedChangedHandler = { [weak self] _, _, pressed in
+                    Task { @MainActor in
+                        self?.handleTouchpadClick(controllerID: id, pressed: pressed)
+                    }
                 }
             }
         }
@@ -210,6 +242,12 @@ final class ControllerManager: ObservableObject {
 
         // Ensure we can inject keys; prompt if needed.
         accessibilityPrompt?()
+
+        // In trackpad mode, the touchpad click is driven by handleTouchpadClick;
+        // skip the keystroke dispatch so the configured "touchpad" action doesn't double-fire.
+        if canonical == "touchpad", trackpadEnabled?() == true {
+            return
+        }
 
         guard let actionDef else { return }
         var shouldTriggerHaptic = false
@@ -285,6 +323,94 @@ final class ControllerManager: ObservableObject {
                 break
             }
             return true
+        }
+    }
+
+    private func handleTouchpadPrimary(controllerID: String, x: Double, y: Double) {
+        guard activeController?.id == controllerID else { return }
+        guard isEnabled?() == true, trackpadEnabled?() == true else {
+            if lastPrimary != nil || mouseSender.anyButtonDown {
+                releaseTrackpadState()
+            }
+            return
+        }
+
+        let touched = !(x == 0 && y == 0)
+        if !touched {
+            // Finger lifted — release any mouse button we were holding.
+            if mouseSender.anyButtonDown {
+                mouseSender.releaseAllButtons()
+            }
+            lastPrimary = nil
+            return
+        }
+
+        guard let prev = lastPrimary else {
+            lastPrimary = (x, y)
+            return
+        }
+
+        // Two-finger gesture: secondary drives scroll, suppress cursor from primary.
+        if lastSecondary != nil {
+            lastPrimary = (x, y)
+            return
+        }
+
+        let settings = trackpadSettings?() ?? .init()
+        let sensitivity = settings.cursorSensitivity ?? 900
+        let dx = (x - prev.x) * sensitivity
+        // GameController y-axis is +up; screen y is +down.
+        let dy = -(y - prev.y) * sensitivity
+        mouseSender.moveCursor(deltaX: dx, deltaY: dy)
+        lastPrimary = (x, y)
+    }
+
+    private func handleTouchpadSecondary(controllerID: String, x: Double, y: Double) {
+        guard activeController?.id == controllerID else { return }
+        guard isEnabled?() == true, trackpadEnabled?() == true else {
+            lastSecondary = nil
+            return
+        }
+
+        let touched = !(x == 0 && y == 0)
+        if !touched {
+            lastSecondary = nil
+            return
+        }
+
+        guard let prev = lastSecondary else {
+            lastSecondary = (x, y)
+            return
+        }
+
+        let settings = trackpadSettings?() ?? .init()
+        let scrollSensitivity = settings.scrollSensitivity ?? 40
+        let natural = settings.naturalScroll ?? true
+        // Fingers moving up (y increases) with natural scroll → scroll wheel +y (content up).
+        let raw = (y - prev.y) * scrollSensitivity
+        let dy = natural ? raw : -raw
+        mouseSender.scroll(deltaY: dy)
+        lastSecondary = (x, y)
+    }
+
+    private func handleTouchpadClick(controllerID: String, pressed: Bool) {
+        guard activeController?.id == controllerID else { return }
+        guard isEnabled?() == true, trackpadEnabled?() == true else {
+            mouseSender.releaseAllButtons()
+            return
+        }
+
+        if pressed {
+            let settings = trackpadSettings?() ?? .init()
+            let modifier = (settings.rightClickModifier ?? "l2").lowercased()
+            let isRightClick = !modifier.isEmpty && self.pressed.contains(modifier)
+            if isRightClick {
+                mouseSender.setRightButton(down: true)
+            } else {
+                mouseSender.setLeftButton(down: true)
+            }
+        } else {
+            mouseSender.releaseAllButtons()
         }
     }
 

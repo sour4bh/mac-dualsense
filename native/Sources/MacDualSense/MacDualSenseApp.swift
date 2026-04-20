@@ -13,11 +13,11 @@ struct MacDualSenseApp: App {
         }
         .menuBarExtraStyle(.window)
 
-        SwiftUI.Settings {
+        Window("mac-dualsense Settings", id: "settings") {
             SettingsRootView(appState: appState)
-                .frame(minWidth: 920, minHeight: 640)
         }
-        .defaultSize(width: 980, height: 680)
+        .defaultSize(width: 1040, height: 720)
+        .windowResizability(.contentMinSize)
         .commands {
             CommandMenu("Controller") {
                 Button(appState.isEnabled ? "Pause Input" : "Resume Input") {

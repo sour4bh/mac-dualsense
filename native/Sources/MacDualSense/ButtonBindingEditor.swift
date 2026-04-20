@@ -27,61 +27,54 @@ struct ButtonBindingEditor: View {
         let isKeystroke = action.type.lowercased() == "keystroke"
 
         VStack(alignment: .leading, spacing: 16) {
-            // Header
-            HStack {
-                Text("Edit: \(button)")
-                    .font(.headline)
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Edit Binding")
+                        .font(.headline)
+                    StatusPill(text: button, color: .blue)
+                }
                 Spacer()
                 Button {
                     onDismiss()
                 } label: {
                     Image(systemName: "xmark.circle.fill")
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.secondary)
                 }
                 .buttonStyle(.plain)
             }
 
-            Divider()
-
-            // Action type
-            HStack {
-                Text("Action")
-                    .frame(width: 80, alignment: .leading)
-                Picker("", selection: typeBinding) {
-                    Text("Keystroke").tag("keystroke")
-                    Text("Wispr").tag("wispr")
-                    Text("No action").tag("noop")
+            editorCard {
+                LabeledContent("Action") {
+                    Picker("", selection: typeBinding) {
+                        Text("Keystroke").tag("keystroke")
+                        Text("Wispr").tag("wispr")
+                        Text("No action").tag("noop")
+                    }
+                    .labelsHidden()
+                    .frame(width: 160)
                 }
-                .labelsHidden()
-                .frame(width: 140)
             }
 
-            // Key (only for keystroke)
             if isKeystroke {
-                HStack {
-                    Text("Key")
-                        .frame(width: 80, alignment: .leading)
-                    TextField("e.g. return, space, a", text: $keyText)
-                        .textFieldStyle(.roundedBorder)
-                        .frame(maxWidth: 200)
-                }
+                editorCard {
+                    LabeledContent("Key") {
+                        TextField("e.g. return, space, a", text: $keyText)
+                            .textFieldStyle(.roundedBorder)
+                            .frame(maxWidth: 220)
+                    }
 
-                HStack {
-                    Text("Modifiers")
-                        .frame(width: 80, alignment: .leading)
-                    TextField("e.g. cmd, shift, alt", text: $modifiersText)
-                        .textFieldStyle(.roundedBorder)
-                        .frame(maxWidth: 200)
-                }
+                    LabeledContent("Modifiers") {
+                        TextField("e.g. cmd, shift, alt", text: $modifiersText)
+                            .textFieldStyle(.roundedBorder)
+                            .frame(maxWidth: 220)
+                    }
 
-                Text("Separate modifiers with commas: cmd, shift, alt, ctrl, fn")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+                    Text("Separate modifiers with commas: cmd, shift, alt, ctrl, fn")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
 
-            Divider()
-
-            // Actions
             HStack {
                 Button(role: .destructive) {
                     onDelete()
@@ -96,10 +89,11 @@ struct ButtonBindingEditor: View {
                     onDismiss()
                 }
                 .keyboardShortcut(.defaultAction)
+                .buttonStyle(.glassProminent)
             }
         }
-        .padding(16)
-        .frame(width: 320)
+        .padding(18)
+        .frame(width: 360)
         .onAppear(perform: syncFromAction)
         .onChange(of: action) { _, _ in syncFromAction() }
         .onChange(of: keyText) { _, newValue in
@@ -111,6 +105,23 @@ struct ButtonBindingEditor: View {
             guard isKeystroke else { return }
             action.modifiers = ConfigStore.parseModifiers(newValue)
         }
+    }
+
+    @ViewBuilder
+    private func editorCard<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            content()
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(.regularMaterial)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
+        )
     }
 
     private var typeBinding: Binding<String> {

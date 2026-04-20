@@ -38,5 +38,11 @@ final class AppState: ObservableObject {
         controllerManager.hapticPattern = { [weak self] name in
             self?.configStore.hapticPattern(name)
         }
+        controllerManager.trackpadEnabled = { [weak self] in
+            self?.configStore.currentTrackpadMode() ?? false
+        }
+        controllerManager.trackpadSettings = { [weak self] in
+            self?.configStore.trackpadSettings() ?? .init()
+        }
     }
 }

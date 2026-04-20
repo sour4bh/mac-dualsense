@@ -13,12 +13,14 @@ struct Settings: Codable {
     var appFocusCacheTtlMs: Int? = 100
     var controller: ControllerSettings? = .init()
     var wispr: WisprSettings? = .init()
+    var trackpad: TrackpadSettings? = .init()
 
     enum CodingKeys: String, CodingKey {
         case pollIntervalMs = "poll_interval_ms"
         case appFocusCacheTtlMs = "app_focus_cache_ttl_ms"
         case controller
         case wispr
+        case trackpad
     }
 }
 
@@ -36,6 +38,20 @@ struct WisprSettings: Codable {
     }
 }
 
+struct TrackpadSettings: Codable {
+    var cursorSensitivity: Double? = 900
+    var scrollSensitivity: Double? = 40
+    var naturalScroll: Bool? = true
+    var rightClickModifier: String? = "l2"
+
+    enum CodingKeys: String, CodingKey {
+        case cursorSensitivity = "cursor_sensitivity"
+        case scrollSensitivity = "scroll_sensitivity"
+        case naturalScroll = "natural_scroll"
+        case rightClickModifier = "right_click_modifier"
+    }
+}
+
 struct Profiles: Codable {
     var active: String = "default"
     var items: [String: ProfileItem] = ["default": .init()]
@@ -43,6 +59,12 @@ struct Profiles: Codable {
 
 struct ProfileItem: Codable {
     var mappings: [String: [String: ActionDef]] = ["default": [:]]
+    var trackpadMode: Bool? = nil
+
+    enum CodingKeys: String, CodingKey {
+        case mappings
+        case trackpadMode = "trackpad_mode"
+    }
 }
 
 struct ActionDef: Codable, Hashable {

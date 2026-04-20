@@ -289,6 +289,25 @@ final class ConfigStore: ObservableObject {
         config.settings.wispr ?? .init()
     }
 
+    func trackpadSettings() -> TrackpadSettings {
+        config.settings.trackpad ?? .init()
+    }
+
+    func trackpadModeEnabled(profile: String) -> Bool {
+        config.profiles.items[profile]?.trackpadMode ?? false
+    }
+
+    func currentTrackpadMode() -> Bool {
+        trackpadModeEnabled(profile: config.profiles.active)
+    }
+
+    func setTrackpadMode(profile: String, enabled: Bool) {
+        var profileItem = config.profiles.items[profile] ?? ProfileItem()
+        profileItem.trackpadMode = enabled ? true : nil
+        config.profiles.items[profile] = profileItem
+        autosave()
+    }
+
     func hapticsEnabled() -> Bool {
         config.haptics?.enabled ?? true
     }
