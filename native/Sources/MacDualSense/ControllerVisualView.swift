@@ -67,7 +67,7 @@ struct ControllerVisualView: View {
                 UnsupportedControllerVisual(controllerType: controllerType)
             }
         }
-        .onChange(of: viewSide) { _ in
+        .onChange(of: viewSide) {
             hoveredButton = nil
         }
     }
@@ -200,7 +200,7 @@ private struct ButtonHitTestLayer: View {
                 .onAppear {
                     computeHitTestCache()
                 }
-                .onChange(of: transform) { _ in
+                .onChange(of: transform) {
                     computeHitTestCache()
                 }
         }

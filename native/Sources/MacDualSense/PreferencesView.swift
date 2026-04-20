@@ -1,41 +1,98 @@
 import SwiftUI
 
-enum PreferencesSection: Hashable {
+enum PreferencesSection: String, CaseIterable, Hashable, Identifiable {
     case controller
     case keybinds
     case profiles
+    case diagnostics
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .controller:
+            return "Controller"
+        case .keybinds:
+            return "Keybinds"
+        case .profiles:
+            return "Profiles"
+        case .diagnostics:
+            return "Diagnostics"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .controller:
+            return "gamecontroller"
+        case .keybinds:
+            return "keyboard"
+        case .profiles:
+            return "square.stack.3d.up"
+        case .diagnostics:
+            return "stethoscope"
+        }
+    }
+}
+
+struct SettingsRootView: View {
+    @ObservedObject var appState: AppState
+
+    var body: some View {
+        PreferencesView(appState: appState)
+            .frame(minWidth: 920, minHeight: 640)
+            .onAppear {
+                NSApp.setActivationPolicy(.regular)
+                NSApp.activate(ignoringOtherApps: true)
+            }
+            .onDisappear {
+                NSApp.setActivationPolicy(.accessory)
+            }
+    }
 }
 
 struct PreferencesView: View {
     @ObservedObject var appState: AppState
-    @State private var selection: PreferencesSection? = .controller
+    @AppStorage("settings.selection") private var storedSelection = PreferencesSection.controller.rawValue
 
     var body: some View {
         NavigationSplitView {
-            List(selection: $selection) {
-                NavigationLink("Controller", value: PreferencesSection.controller)
-                NavigationLink("Profiles", value: PreferencesSection.profiles)
-                NavigationLink("Keybinds", value: PreferencesSection.keybinds)
+            List(selection: selectionBinding) {
+                ForEach(PreferencesSection.allCases) { section in
+                    NavigationLink(value: section) {
+                        Label(section.title, systemImage: section.systemImage)
+                    }
+                }
             }
+            .listStyle(.sidebar)
         } detail: {
-            switch selection {
+            switch selectedSection {
             case .controller:
                 ControllerPreferencesView(appState: appState)
             case .profiles:
                 ProfilesPreferencesView(appState: appState)
             case .keybinds:
                 KeybindsPreferencesView(appState: appState)
+            case .diagnostics:
+                DiagnosticsPreferencesView(appState: appState)
             case .none:
                 ControllerPreferencesView(appState: appState)
             }
         }
         .frame(minWidth: 860, minHeight: 560)
-        .onAppear {
-            NSApp.setActivationPolicy(.regular)
-        }
-        .onDisappear {
-            NSApp.setActivationPolicy(.accessory)
-        }
+    }
+
+    private var selectedSection: PreferencesSection? {
+        PreferencesSection(rawValue: storedSelection) ?? .controller
+    }
+
+    private var selectionBinding: Binding<PreferencesSection?> {
+        Binding(
+            get: { selectedSection },
+            set: { newValue in
+                storedSelection = newValue?.rawValue ?? PreferencesSection.controller.rawValue
+            }
+        )
     }
 }
 
@@ -324,6 +381,157 @@ struct ProfilesPreferencesView: View {
     }
 }
 
+struct DiagnosticsPreferencesView: View {
+    @ObservedObject var appState: AppState
+    @ObservedObject private var store: ConfigStore
+    @ObservedObject private var controller: ControllerManager
+
+    init(appState: AppState) {
+        self.appState = appState
+        self.store = appState.configStore
+        self.controller = appState.controllerManager
+    }
+
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 0.5)) { _ in
+            let focus = store.currentFocusStatus()
+            let accessibilityGranted = store.accessibilityPermissionGranted()
+            let recentEvents = Array(controller.recentEvents.suffix(8).reversed())
+
+            ScrollView(.vertical) {
+                VStack(alignment: .leading, spacing: 18) {
+                    HStack(alignment: .firstTextBaseline) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Diagnostics")
+                                .font(.largeTitle.weight(.semibold))
+                            Text("Runtime state, permissions, config health, and recent controller activity.")
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Button("Reload Config") { store.reload() }
+                        Button("Reveal Logs") { Logger.shared.revealLogFileInFinder() }
+                    }
+
+                    GroupBox {
+                        VStack(alignment: .leading, spacing: 12) {
+                            HStack {
+                                Toggle("Input enabled", isOn: $appState.isEnabled)
+                                    .toggleStyle(.switch)
+                                Spacer()
+                                StatusPill(
+                                    text: accessibilityGranted ? "Accessibility Granted" : "Accessibility Needed",
+                                    color: accessibilityGranted ? .green : .orange
+                                )
+                            }
+
+                            DiagnosticsValueRow(title: "Active profile", value: store.activeProfileName())
+                            DiagnosticsValueRow(title: "Connected controllers", value: "\(controller.controllers.count)")
+                            DiagnosticsValueRow(
+                                title: "Active controller",
+                                value: activeControllerSummary
+                            )
+
+                            if let lastEvent = controller.lastEvent {
+                                DiagnosticsValueRow(
+                                    title: "Last event",
+                                    value: "\(lastEvent.state) \(lastEvent.button) -> \(lastEvent.action)"
+                                )
+                            } else {
+                                DiagnosticsValueRow(title: "Last event", value: "No controller input yet")
+                            }
+                        }
+                    } label: {
+                        Label("Runtime", systemImage: "gauge.with.needle")
+                    }
+
+                    GroupBox {
+                        VStack(alignment: .leading, spacing: 12) {
+                            DiagnosticsValueRow(title: "Frontmost app", value: focus.appName ?? "—")
+                            DiagnosticsValueRow(title: "Bundle ID", value: focus.bundleID ?? "—", monospaced: true)
+                            DiagnosticsValueRow(
+                                title: "Resolved context",
+                                value: "\(store.contextLabel(focus.context)) (\(focus.context))"
+                            )
+                        }
+                    } label: {
+                        Label("App Focus", systemImage: "app.badge")
+                    }
+
+                    GroupBox {
+                        VStack(alignment: .leading, spacing: 12) {
+                            DiagnosticsValueRow(title: "Config file", value: store.configFileURL.path, monospaced: true)
+                            DiagnosticsValueRow(title: "Log file", value: Logger.shared.logFileURL.path, monospaced: true)
+                            DiagnosticsValueRow(
+                                title: "Last reload",
+                                value: formattedTimestamp(store.lastLoadedAt)
+                            )
+                            DiagnosticsValueRow(
+                                title: "Last save",
+                                value: formattedTimestamp(store.lastSavedAt)
+                            )
+
+                            if let error = store.lastLoadError {
+                                DiagnosticsValueRow(title: "Reload error", value: error)
+                            }
+                            if let error = store.lastSaveError {
+                                DiagnosticsValueRow(title: "Save error", value: error)
+                            }
+
+                            HStack(spacing: 10) {
+                                Button("Request Accessibility Access") {
+                                    store.ensureAccessibilityPermission()
+                                }
+                                Button("Open Config") {
+                                    store.openConfigInFinder()
+                                }
+                                Button("Open Support Folder") {
+                                    store.openSupportFolderInFinder()
+                                }
+                            }
+                        }
+                    } label: {
+                        Label("Files & Permissions", systemImage: "folder.badge.gearshape")
+                    }
+
+                    GroupBox {
+                        if recentEvents.isEmpty {
+                            Text("No recent controller events.")
+                                .foregroundStyle(.secondary)
+                        } else {
+                            VStack(spacing: 0) {
+                                ForEach(recentEvents) { event in
+                                    RecentControllerEventRow(event: event)
+                                    if event.id != recentEvents.last?.id {
+                                        Divider()
+                                    }
+                                }
+                            }
+                        }
+                    } label: {
+                        Label("Recent Events", systemImage: "waveform.path.ecg")
+                    }
+                }
+                .padding(20)
+                .frame(maxWidth: 760, alignment: .leading)
+                .frame(maxWidth: .infinity, alignment: .topLeading)
+            }
+        }
+    }
+
+    private var activeControllerSummary: String {
+        guard let activeController = controller.activeController else { return "None" }
+        if let vendor = activeController.vendor, !vendor.isEmpty {
+            return "\(activeController.name) (\(vendor))"
+        }
+        return activeController.name
+    }
+
+    private func formattedTimestamp(_ date: Date?) -> String {
+        guard let date else { return "—" }
+        return date.formatted(date: .omitted, time: .standard)
+    }
+}
+
 struct KeybindsPreferencesView: View {
     @ObservedObject var appState: AppState
     @ObservedObject var store: ConfigStore
@@ -447,12 +655,12 @@ struct KeybindsPreferencesView: View {
             }
             context = editingContext
         }
-        .onChange(of: profiles) { _ in
+        .onChange(of: profiles) { _, _ in
             if !profiles.contains(profile) {
                 profile = active
             }
         }
-        .onChange(of: controller.lastEvent?.id) { _ in
+        .onChange(of: controller.lastEvent?.id) { _, _ in
             guard learnNextButton, let event = controller.lastEvent, event.state == "Pressed" else { return }
             learnNextButton = false
             let btn = event.button
@@ -471,6 +679,64 @@ struct KeybindsPreferencesView: View {
         } message: {
             Text(errorMessage ?? "")
         }
+    }
+}
+
+private struct DiagnosticsValueRow: View {
+    let title: String
+    let value: String
+    var monospaced: Bool = false
+
+    var body: some View {
+        LabeledContent(title) {
+            Text(value)
+                .font(monospaced ? .system(size: 12, design: .monospaced) : .body)
+                .textSelection(.enabled)
+                .multilineTextAlignment(.trailing)
+        }
+    }
+}
+
+private struct RecentControllerEventRow: View {
+    let event: ControllerManager.ButtonEvent
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 12) {
+            Text(event.time.formatted(date: .omitted, time: .standard))
+                .font(.system(size: 12, design: .monospaced))
+                .foregroundStyle(.secondary)
+                .frame(width: 88, alignment: .leading)
+
+            StatusPill(
+                text: event.state,
+                color: event.state == "Pressed" ? .green : .secondary
+            )
+
+            Text(event.button)
+                .font(.system(size: 12, design: .monospaced))
+                .frame(width: 120, alignment: .leading)
+
+            Text(event.action)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+
+            Spacer(minLength: 0)
+        }
+        .padding(.vertical, 10)
+    }
+}
+
+private struct StatusPill: View {
+    let text: String
+    let color: Color
+
+    var body: some View {
+        Text(text)
+            .font(.caption.weight(.semibold))
+            .padding(.horizontal, 10)
+            .padding(.vertical, 4)
+            .foregroundStyle(color)
+            .background(color.opacity(0.14), in: Capsule())
     }
 }
 
@@ -528,13 +794,13 @@ private struct KeybindRow: View {
             .buttonStyle(.borderless)
         }
         .onAppear(perform: syncFromAction)
-        .onChange(of: action) { _ in syncFromAction() }
-        .onChange(of: keyText) { newValue in
+        .onChange(of: action) { _, _ in syncFromAction() }
+        .onChange(of: keyText) { _, newValue in
             guard isKeystroke else { return }
             let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
             action.key = trimmed.isEmpty ? nil : trimmed
         }
-        .onChange(of: modifiersText) { newValue in
+        .onChange(of: modifiersText) { _, newValue in
             guard isKeystroke else { return }
             action.modifiers = ConfigStore.parseModifiers(newValue)
         }

@@ -27,6 +27,10 @@ final class ConfigStore: ObservableObject {
     }
 
     @Published private(set) var config: Config = .init()
+    @Published private(set) var lastLoadError: String? = nil
+    @Published private(set) var lastSaveError: String? = nil
+    @Published private(set) var lastLoadedAt: Date? = nil
+    @Published private(set) var lastSavedAt: Date? = nil
 
     private let appSupportDir: URL
     private let configURL: URL
@@ -54,6 +58,8 @@ final class ConfigStore: ObservableObject {
         startWatchingConfig()
     }
 
+    var configFileURL: URL { configURL }
+
     func loadOrSeed() {
         do {
             try FileManager.default.createDirectory(at: appSupportDir, withIntermediateDirectories: true)
@@ -74,7 +80,12 @@ final class ConfigStore: ObservableObject {
             config = try decoder.decode(Config.self, from: yaml)
             normalize()
             appFocus.cacheTTLms = config.settings.appFocusCacheTtlMs ?? 100
+            lastLoadError = nil
+            lastLoadedAt = Date()
+            Logger.shared.info("Reloaded config from \(configURL.path)")
         } catch {
+            lastLoadError = error.localizedDescription
+            Logger.shared.error("Failed to reload config: \(error.localizedDescription)")
             // Keep last-good config but avoid crashing the app.
         }
     }
@@ -86,8 +97,12 @@ final class ConfigStore: ObservableObject {
             let encoder = YAMLEncoder()
             let yaml = try encoder.encode(config)
             try yaml.write(to: configURL, atomically: true, encoding: .utf8)
+            lastSaveError = nil
+            lastSavedAt = Date()
+            Logger.shared.info("Saved config to \(configURL.path)")
         } catch {
-            // best-effort
+            lastSaveError = error.localizedDescription
+            Logger.shared.error("Failed to save config: \(error.localizedDescription)")
         }
     }
 
@@ -104,6 +119,10 @@ final class ConfigStore: ObservableObject {
 
     func openConfigInFinder() {
         NSWorkspace.shared.activateFileViewerSelecting([configURL])
+    }
+
+    func openSupportFolderInFinder() {
+        NSWorkspace.shared.activateFileViewerSelecting([appSupportDir])
     }
 
     func resolve(button: String) -> ActionDef? {
@@ -281,6 +300,14 @@ final class ConfigStore: ObservableObject {
     func ensureAccessibilityPermission() {
         let options: NSDictionary = [kAXTrustedCheckOptionPrompt.takeRetainedValue() as NSString: true]
         _ = AXIsProcessTrustedWithOptions(options)
+    }
+
+    func accessibilityPermissionGranted() -> Bool {
+        AXIsProcessTrusted()
+    }
+
+    func currentFocusStatus() -> AppFocus.Status {
+        appFocus.status()
     }
 
     private func startWatchingConfig() {

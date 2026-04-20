@@ -101,13 +101,13 @@ struct ButtonBindingEditor: View {
         .padding(16)
         .frame(width: 320)
         .onAppear(perform: syncFromAction)
-        .onChange(of: action) { _ in syncFromAction() }
-        .onChange(of: keyText) { newValue in
+        .onChange(of: action) { _, _ in syncFromAction() }
+        .onChange(of: keyText) { _, newValue in
             guard isKeystroke else { return }
             let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
             action.key = trimmed.isEmpty ? nil : trimmed
         }
-        .onChange(of: modifiersText) { newValue in
+        .onChange(of: modifiersText) { _, newValue in
             guard isKeystroke else { return }
             action.modifiers = ConfigStore.parseModifiers(newValue)
         }

@@ -2,12 +2,18 @@ import AppKit
 import Foundation
 
 final class AppFocus {
+    struct Status {
+        let appName: String?
+        let bundleID: String?
+        let context: String
+    }
+
     var cacheTTLms: Int {
         didSet { ttl = Double(cacheTTLms) / 1000.0 }
     }
 
     private var ttl: Double
-    private var cachedBundleID: String?
+    private var cachedStatus: Status?
     private var lastRead: TimeInterval = 0
 
     // Bundle ID to context name mapping
@@ -27,20 +33,23 @@ final class AppFocus {
     }
 
     func context() -> String {
-        let bundleID = frontmostBundleID()
-        return contexts[bundleID ?? ""] ?? "default"
+        status().context
     }
 
-    private func frontmostBundleID() -> String? {
+    func status() -> Status {
         let now = Date().timeIntervalSinceReferenceDate
-        if let cachedBundleID, (now - lastRead) < ttl {
-            return cachedBundleID
+        if let cachedStatus, (now - lastRead) < ttl {
+            return cachedStatus
         }
 
-        let id = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
-        cachedBundleID = id
+        let app = NSWorkspace.shared.frontmostApplication
+        let status = Status(
+            appName: app?.localizedName,
+            bundleID: app?.bundleIdentifier,
+            context: contexts[app?.bundleIdentifier ?? ""] ?? "default"
+        )
+        cachedStatus = status
         lastRead = now
-        return id
+        return status
     }
 }
-
