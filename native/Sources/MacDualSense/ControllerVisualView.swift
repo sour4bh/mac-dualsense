@@ -2,14 +2,30 @@ import SwiftUI
 
 // MARK: - Main View
 
-struct ControllerVisualView: View {
+struct ControllerVisualView<PopoverContent: View>: View {
     let controllerType: ControllerType
     let viewSide: ControllerViewSide
     let pressed: Set<String>
     let getAction: (String) -> ActionDef?
-    let onEditButton: ((String) -> Void)?
+    let popoverContent: (String, @escaping () -> Void) -> PopoverContent
 
     @State private var hoveredButton: String?
+    @State private var editingButton: String? = nil
+    @State private var editingRect: CGRect = .zero
+
+    init(
+        controllerType: ControllerType,
+        viewSide: ControllerViewSide,
+        pressed: Set<String>,
+        getAction: @escaping (String) -> ActionDef?,
+        @ViewBuilder popoverContent: @escaping (String, @escaping () -> Void) -> PopoverContent
+    ) {
+        self.controllerType = controllerType
+        self.viewSide = viewSide
+        self.pressed = pressed
+        self.getAction = getAction
+        self.popoverContent = popoverContent
+    }
 
     private var buttonProvider: ControllerButtonProvider? {
         controllerType.buttonProvider(for: viewSide)
@@ -55,13 +71,28 @@ struct ControllerVisualView: View {
                             transform: transform,
                             hitTestStrokeWidth: viewSide == .back ? 0 : 22,
                             hoveredButton: $hoveredButton,
-                            onEditButton: onEditButton,
+                            onEditButton: { buttonId, bounds in
+                                editingRect = bounds
+                                editingButton = buttonId
+                            },
                             getAction: getAction
                         )
                         .frame(width: scaledSize.width, height: scaledSize.height)
                     }
                     .frame(width: scaledSize.width, height: scaledSize.height)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .popover(
+                        isPresented: Binding(
+                            get: { editingButton != nil },
+                            set: { if !$0 { editingButton = nil } }
+                        ),
+                        attachmentAnchor: .rect(.rect(editingRect)),
+                        arrowEdge: .top
+                    ) {
+                        if let button = editingButton {
+                            popoverContent(button) { editingButton = nil }
+                        }
+                    }
                 }
             } else {
                 UnsupportedControllerVisual(controllerType: controllerType)
@@ -69,6 +100,7 @@ struct ControllerVisualView: View {
         }
         .onChange(of: viewSide) {
             hoveredButton = nil
+            editingButton = nil
         }
     }
 
@@ -161,7 +193,7 @@ private struct ButtonHitTestLayer: View {
     let transform: CGAffineTransform
     let hitTestStrokeWidth: CGFloat
     @Binding var hoveredButton: String?
-    let onEditButton: ((String) -> Void)?
+    let onEditButton: ((String, CGRect) -> Void)?
     let getAction: (String) -> ActionDef?
 
     // Cached hit test data
@@ -265,7 +297,7 @@ private struct ButtonHitTestLayer: View {
             let stroked = strokedPaths[buttonId]
 
             if path.contains(point) || (stroked?.contains(point) == true) {
-                onEditButton?(buttonId)
+                onEditButton?(buttonId, bounds)
                 return
             }
         }
@@ -282,15 +314,22 @@ private struct ButtonTooltip: View {
         VStack(spacing: 2) {
             Text(label)
                 .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(.primary)
             Text(ActionFormatter.format(action))
                 .font(.system(size: 9))
-                .foregroundColor(.secondary)
+                .foregroundStyle(.secondary)
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 4)
-        .background(Color(white: 0.15).opacity(0.95))
-        .cornerRadius(6)
-        .shadow(color: .black.opacity(0.3), radius: 4)
+        .background(
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(.regularMaterial)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .strokeBorder(Color.primary.opacity(0.12), lineWidth: 1)
+        )
+        .shadow(color: .black.opacity(0.25), radius: 4, y: 1)
     }
 }
 
@@ -304,7 +343,7 @@ struct ControllerVisualView_Previews: PreviewProvider {
             viewSide: .front,
             pressed: ["cross", "l1"],
             getAction: { _ in nil },
-            onEditButton: nil
+            popoverContent: { _, _ in EmptyView() }
         )
         .frame(width: 600, height: 500)
         .background(Color(white: 0.15))

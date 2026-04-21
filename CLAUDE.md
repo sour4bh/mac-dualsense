@@ -67,6 +67,7 @@ Context names: `warp`, `arc`, `chrome`, `slack`, `chatgpt`, `claude`, `default`
 - **Adding a new key**: Add case to `keyCode(for:)` in `KeySender.swift`
 - **Adding a new wispr mode**: Add case to `handleWispr()` in `ControllerManager.swift`
 - **Wiring DualSense-specific inputs**: inside `ControllerManager.attachHandlers()`, cast `profile as? GCDualSenseGamepad` and attach handlers; bridge to config via a `ControllerManager` closure property + `ConfigStore` accessor + wiring in `AppState.init` (mirrors the `trackpadEnabled` / `wisprMode` pattern)
+- **Hopping off-main work back to `@MainActor`**: use `DispatchWorkItem { MainActor.assumeIsolated { … } }` dispatched via `DispatchQueue.main.asyncAfter`, or set the `DispatchSource` queue to `DispatchQueue.main`. Do not use `Task { @MainActor in … }` from a `@Sendable` closure that captures a MainActor-isolated `self` — Swift 6 emits an isolation fence at the top of the outer closure and traps on non-main queues (`_swift_task_checkIsolatedSwift` → `dispatch_assert_queue_fail`). See `ConfigStore.autosave`, `startWatchingConfig`, `scheduleReloadFromDisk`.
 
 ## TODO
 

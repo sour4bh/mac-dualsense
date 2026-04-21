@@ -113,7 +113,7 @@ final class KeySender: @unchecked Sendable {
         return flags
     }
 
-    private static func keyCode(for key: String) -> CGKeyCode? {
+    static func keyCode(for key: String) -> CGKeyCode? {
         let raw = key.trimmingCharacters(in: .whitespacesAndNewlines)
         if raw.isEmpty { return nil }
 

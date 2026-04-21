@@ -112,16 +112,18 @@ struct PreferencesView: View {
         }
         .toolbar {
             ToolbarItem(placement: .navigation) {
-                Picker("Profile", selection: Binding(
-                    get: { configStore.activeProfileName() },
-                    set: { configStore.setActiveProfile($0) }
-                )) {
-                    ForEach(configStore.profileNames(), id: \.self) { name in
-                        Text(name).tag(name)
+                Menu {
+                    Picker("Profile", selection: Binding(
+                        get: { configStore.activeProfileName() },
+                        set: { configStore.setActiveProfile($0) }
+                    )) {
+                        ForEach(configStore.profileNames(), id: \.self) { name in
+                            Text(name).tag(name)
+                        }
                     }
+                } label: {
+                    Label(configStore.activeProfileName(), systemImage: "person.crop.square")
                 }
-                .pickerStyle(.menu)
-                .frame(minWidth: 140)
                 .help("Active profile")
             }
 
@@ -129,7 +131,7 @@ struct PreferencesView: View {
                 Toggle(isOn: $appState.isEnabled) {
                     Label(
                         appState.isEnabled ? "Enabled" : "Paused",
-                        systemImage: appState.isEnabled ? "play.fill" : "pause.fill"
+                        systemImage: appState.isEnabled ? "power.circle.fill" : "power.circle"
                     )
                 }
                 .toggleStyle(.button)
@@ -140,16 +142,8 @@ struct PreferencesView: View {
                 } label: {
                     Label("Reload", systemImage: "arrow.clockwise")
                 }
+                .keyboardShortcut("r", modifiers: [.command])
                 .help("Reload mappings from disk")
-
-                Button {
-                    configStore.save()
-                } label: {
-                    Label("Save", systemImage: "square.and.arrow.down")
-                }
-                .keyboardShortcut("s", modifiers: [.command])
-                .buttonStyle(.glassProminent)
-                .help("Save config to disk")
             }
         }
     }
@@ -172,8 +166,6 @@ struct ControllerPreferencesView: View {
     @ObservedObject var appState: AppState
     @ObservedObject var controllerManager: ControllerManager
     @ObservedObject var configStore: ConfigStore
-
-    @State private var editingButton: String? = nil
 
     init(appState: AppState) {
         self.appState = appState
@@ -215,40 +207,34 @@ struct ControllerPreferencesView: View {
                         controllerType: controllerType,
                         viewSide: side,
                         pressed: controllerManager.pressed,
-                        getAction: { configStore.resolve(button: $0) },
-                        onEditButton: { button in
-                            editingButton = button
-                        }
-                    )
+                        getAction: { configStore.resolve(button: $0) }
+                    ) { button, dismiss in
+                        ButtonBindingEditor(
+                            button: button,
+                            action: Binding(
+                                get: {
+                                    configStore.action(profile: activeProfile, context: context, button: button)
+                                        ?? ActionDef(type: "noop", key: nil, modifiers: nil)
+                                },
+                                set: { updated in
+                                    configStore.setAction(
+                                        profile: activeProfile,
+                                        context: context,
+                                        button: button,
+                                        action: updated
+                                    )
+                                }
+                            ),
+                            onDelete: {
+                                configStore.deleteAction(profile: activeProfile, context: context, button: button)
+                            },
+                            onDismiss: dismiss
+                        )
+                    }
                     .aspectRatio(aspectRatio(for: side), contentMode: .fit)
                     .frame(maxWidth: .infinity)
                 }
             }
-        }
-        .popover(item: $editingButton) { button in
-            ButtonBindingEditor(
-                button: button,
-                action: Binding(
-                    get: {
-                        configStore.action(profile: activeProfile, context: context, button: button)
-                            ?? ActionDef(type: "noop", key: nil, modifiers: nil)
-                    },
-                    set: { updated in
-                        configStore.setAction(
-                            profile: activeProfile,
-                            context: context,
-                            button: button,
-                            action: updated
-                        )
-                    }
-                ),
-                onDelete: {
-                    configStore.deleteAction(profile: activeProfile, context: context, button: button)
-                },
-                onDismiss: {
-                    editingButton = nil
-                }
-            )
         }
     }
 
@@ -259,10 +245,6 @@ struct ControllerPreferencesView: View {
         return 590.0 / 410.0
     }
 
-}
-
-extension String: @retroactive Identifiable {
-    public var id: String { self }
 }
 
 struct ProfilesPreferencesView: View {

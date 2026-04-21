@@ -109,7 +109,7 @@ final class ConfigStore: ObservableObject {
     func autosave(after delaySeconds: TimeInterval = 0.25) {
         pendingSave?.cancel()
         let work = DispatchWorkItem { [weak self] in
-            Task { @MainActor in
+            MainActor.assumeIsolated {
                 self?.save()
             }
         }
@@ -336,11 +336,11 @@ final class ConfigStore: ObservableObject {
         let watcher = DispatchSource.makeFileSystemObjectSource(
             fileDescriptor: fd,
             eventMask: [.write, .rename, .delete, .extend, .attrib, .link, .revoke],
-            queue: DispatchQueue.global(qos: .utility)
+            queue: DispatchQueue.main
         )
 
         watcher.setEventHandler { [weak self] in
-            Task { @MainActor in
+            MainActor.assumeIsolated {
                 self?.scheduleReloadFromDisk()
             }
         }
@@ -355,7 +355,7 @@ final class ConfigStore: ObservableObject {
     private func scheduleReloadFromDisk(after delaySeconds: TimeInterval = 0.15) {
         pendingReload?.cancel()
         let work = DispatchWorkItem { [weak self] in
-            Task { @MainActor in
+            MainActor.assumeIsolated {
                 self?.reload()
             }
         }
