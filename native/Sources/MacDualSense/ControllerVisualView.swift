@@ -2,29 +2,30 @@ import SwiftUI
 
 // MARK: - Main View
 
-struct ControllerVisualView<PopoverContent: View>: View {
+struct ControllerVisualView: View {
     let controllerType: ControllerType
     let viewSide: ControllerViewSide
     let pressed: Set<String>
+    let selectedButton: String?
     let getAction: (String) -> ActionDef?
-    let popoverContent: (String, @escaping () -> Void) -> PopoverContent
+    let onSelectButton: (String) -> Void
 
     @State private var hoveredButton: String?
-    @State private var editingButton: String? = nil
-    @State private var editingRect: CGRect = .zero
 
     init(
         controllerType: ControllerType,
         viewSide: ControllerViewSide,
         pressed: Set<String>,
+        selectedButton: String?,
         getAction: @escaping (String) -> ActionDef?,
-        @ViewBuilder popoverContent: @escaping (String, @escaping () -> Void) -> PopoverContent
+        onSelectButton: @escaping (String) -> Void
     ) {
         self.controllerType = controllerType
         self.viewSide = viewSide
         self.pressed = pressed
+        self.selectedButton = selectedButton
         self.getAction = getAction
-        self.popoverContent = popoverContent
+        self.onSelectButton = onSelectButton
     }
 
     private var buttonProvider: ControllerButtonProvider? {
@@ -61,6 +62,7 @@ struct ControllerVisualView<PopoverContent: View>: View {
                             buttons: buttonProvider.buttons,
                             transform: transform,
                             pressed: pressed,
+                            selectedButton: selectedButton,
                             hoveredButton: hoveredButton,
                             getAction: getAction
                         )
@@ -71,28 +73,13 @@ struct ControllerVisualView<PopoverContent: View>: View {
                             transform: transform,
                             hitTestStrokeWidth: viewSide == .back ? 0 : 22,
                             hoveredButton: $hoveredButton,
-                            onEditButton: { buttonId, bounds in
-                                editingRect = bounds
-                                editingButton = buttonId
-                            },
+                            onSelectButton: onSelectButton,
                             getAction: getAction
                         )
                         .frame(width: scaledSize.width, height: scaledSize.height)
                     }
                     .frame(width: scaledSize.width, height: scaledSize.height)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .popover(
-                        isPresented: Binding(
-                            get: { editingButton != nil },
-                            set: { if !$0 { editingButton = nil } }
-                        ),
-                        attachmentAnchor: .rect(.rect(editingRect)),
-                        arrowEdge: .top
-                    ) {
-                        if let button = editingButton {
-                            popoverContent(button) { editingButton = nil }
-                        }
-                    }
                 }
             } else {
                 UnsupportedControllerVisual(controllerType: controllerType)
@@ -100,7 +87,6 @@ struct ControllerVisualView<PopoverContent: View>: View {
         }
         .onChange(of: viewSide) {
             hoveredButton = nil
-            editingButton = nil
         }
     }
 
@@ -161,6 +147,7 @@ private struct ButtonOverlayCanvas: View {
     let buttons: [String: ControllerButton]
     let transform: CGAffineTransform
     let pressed: Set<String>
+    let selectedButton: String?
     let hoveredButton: String?
     let getAction: (String) -> ActionDef?
 
@@ -174,6 +161,10 @@ private struct ButtonOverlayCanvas: View {
                     // Pressed: solid fill with glow
                     context.fill(path, with: .color(color.opacity(0.7)))
                     context.stroke(path, with: .color(color.opacity(0.9)), lineWidth: 2)
+                } else if selectedButton == buttonId {
+                    // Selected: persistent highlight to anchor the inspector.
+                    context.fill(path, with: .color(color.opacity(0.35)))
+                    context.stroke(path, with: .color(color.opacity(0.85)), lineWidth: 2)
                 } else if hoveredButton == buttonId {
                     // Hovered: light fill + stroke
                     context.fill(path, with: .color(color.opacity(0.25)))
@@ -193,7 +184,7 @@ private struct ButtonHitTestLayer: View {
     let transform: CGAffineTransform
     let hitTestStrokeWidth: CGFloat
     @Binding var hoveredButton: String?
-    let onEditButton: ((String, CGRect) -> Void)?
+    let onSelectButton: ((String) -> Void)?
     let getAction: (String) -> ActionDef?
 
     // Cached hit test data
@@ -297,7 +288,7 @@ private struct ButtonHitTestLayer: View {
             let stroked = strokedPaths[buttonId]
 
             if path.contains(point) || (stroked?.contains(point) == true) {
-                onEditButton?(buttonId, bounds)
+                onSelectButton?(buttonId)
                 return
             }
         }
@@ -342,8 +333,9 @@ struct ControllerVisualView_Previews: PreviewProvider {
             controllerType: .dualSense,
             viewSide: .front,
             pressed: ["cross", "l1"],
+            selectedButton: "cross",
             getAction: { _ in nil },
-            popoverContent: { _, _ in EmptyView() }
+            onSelectButton: { _ in }
         )
         .frame(width: 600, height: 500)
         .background(Color(white: 0.15))

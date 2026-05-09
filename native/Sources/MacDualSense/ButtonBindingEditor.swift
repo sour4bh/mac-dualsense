@@ -4,7 +4,7 @@ struct ButtonBindingEditor: View {
     let button: String
     @Binding var action: ActionDef
     let onDelete: () -> Void
-    let onDismiss: () -> Void
+    let onDismiss: (() -> Void)?
 
     @FocusState private var isCapturing: Bool
 
@@ -12,7 +12,7 @@ struct ButtonBindingEditor: View {
         button: String,
         action: Binding<ActionDef>,
         onDelete: @escaping () -> Void,
-        onDismiss: @escaping () -> Void
+        onDismiss: (() -> Void)? = nil
     ) {
         self.button = button
         self._action = action
@@ -70,7 +70,7 @@ struct ButtonBindingEditor: View {
             previewRow
 
             if isWispr {
-                Text("Configure Wispr trigger in Settings → Wispr.")
+                Text("Wispr behavior is controlled by `settings.wispr` in the YAML config.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -79,7 +79,7 @@ struct ButtonBindingEditor: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Button(role: .destructive) {
                         onDelete()
-                        onDismiss()
+                        onDismiss?()
                     } label: {
                         Label("Unbind", systemImage: "trash")
                     }
@@ -90,19 +90,18 @@ struct ButtonBindingEditor: View {
 
                 Spacer()
 
-                Button("Done") {
-                    onDismiss()
+                if let onDismiss {
+                    Button("Done") {
+                        onDismiss()
+                    }
+                    .keyboardShortcut(.defaultAction)
+                    .buttonStyle(.glassProminent)
                 }
-                .keyboardShortcut(.defaultAction)
-                .buttonStyle(.glassProminent)
             }
         }
         .padding(18)
-        .frame(width: 380)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .onAppear {
-            if action.type.lowercased() == "noop" {
-                action.type = "keystroke"
-            }
             if action.type.lowercased() == "keystroke" {
                 isCapturing = true
             }
@@ -119,14 +118,16 @@ struct ButtonBindingEditor: View {
                 StatusPill(text: button, color: .blue)
             }
             Spacer()
-            Button {
-                onDismiss()
-            } label: {
-                Image(systemName: "xmark.circle.fill")
-                    .foregroundStyle(.secondary)
+            if let onDismiss {
+                Button {
+                    onDismiss()
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .keyboardShortcut(.cancelAction)
             }
-            .buttonStyle(.plain)
-            .keyboardShortcut(.cancelAction)
         }
     }
 

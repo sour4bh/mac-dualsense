@@ -1,60 +1,22 @@
 import SwiftUI
 
-enum PreferencesSection: String, CaseIterable, Hashable, Identifiable {
-    case controller
-    case keybinds
-    case profiles
-    case diagnostics
+struct WorkspaceRootView: View {
+    static let windowID = "workspace"
 
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .controller:
-            return "Controller"
-        case .keybinds:
-            return "Keybinds"
-        case .profiles:
-            return "Profiles"
-        case .diagnostics:
-            return "Diagnostics"
-        }
-    }
-
-    var systemImage: String {
-        switch self {
-        case .controller:
-            return "gamecontroller"
-        case .keybinds:
-            return "keyboard"
-        case .profiles:
-            return "square.stack.3d.up"
-        case .diagnostics:
-            return "stethoscope"
-        }
-    }
-
-    var detail: String {
-        switch self {
-        case .controller:
-            return "Live routing and visual editor"
-        case .keybinds:
-            return "Profiles, contexts, and mappings"
-        case .profiles:
-            return "Manage mapping sets"
-        case .diagnostics:
-            return "Permissions, focus, and logs"
-        }
-    }
-}
-
-struct SettingsRootView: View {
     @ObservedObject var appState: AppState
+    let onFirstAppearance: () -> Void
+
+    @State private var didRecordLaunch = false
 
     var body: some View {
-        PreferencesView(appState: appState)
-            .frame(minWidth: 820, minHeight: 520)
+        WorkspaceView(appState: appState)
+            .frame(minWidth: 1120, minHeight: 720)
             .onAppear {
+                if !didRecordLaunch {
+                    didRecordLaunch = true
+                    onFirstAppearance()
+                }
+                appState.workspaceSelection.seedEditedContext(from: appState.configStore.currentFocusStatus().context)
                 NSApp.setActivationPolicy(.regular)
                 NSApp.activate(ignoringOtherApps: true)
             }
@@ -64,30 +26,29 @@ struct SettingsRootView: View {
     }
 }
 
-struct PreferencesView: View {
+struct WorkspaceView: View {
     @ObservedObject var appState: AppState
     @ObservedObject private var configStore: ConfigStore
-    @ObservedObject private var controllerManager: ControllerManager
-    @AppStorage("settings.selection") private var storedSelection = PreferencesSection.controller.rawValue
+    @ObservedObject private var selection: WorkspaceSelection
 
     init(appState: AppState) {
         self.appState = appState
         self.configStore = appState.configStore
-        self.controllerManager = appState.controllerManager
+        self.selection = appState.workspaceSelection
     }
 
     var body: some View {
         NavigationSplitView {
-            List(selection: selectionBinding) {
-                ForEach(PreferencesSection.allCases) { section in
+            List(selection: sectionBinding) {
+                ForEach(WorkspaceSection.allCases) { section in
                     NavigationLink(value: section) {
-                        SettingsSidebarRow(section: section)
+                        WorkspaceSidebarRow(section: section)
                     }
                 }
             }
             .listStyle(.sidebar)
             .safeAreaInset(edge: .top, spacing: 0) {
-                SettingsSidebarSummary(appState: appState)
+                WorkspaceSidebarSummary(appState: appState)
                     .padding(.horizontal, 10)
                     .padding(.top, 4)
                     .padding(.bottom, 10)
@@ -95,20 +56,18 @@ struct PreferencesView: View {
             .navigationSplitViewColumnWidth(min: 220, ideal: 236, max: 280)
         } detail: {
             Group {
-                switch selectedSection {
+                switch selection.section {
                 case .controller:
-                    ControllerPreferencesView(appState: appState)
+                    ControllerWorkspaceView(appState: appState)
                 case .profiles:
-                    ProfilesPreferencesView(appState: appState)
+                    ProfilesWorkspaceView(appState: appState)
                 case .keybinds:
-                    KeybindsPreferencesView(appState: appState)
+                    KeybindsWorkspaceView(appState: appState)
                 case .diagnostics:
-                    DiagnosticsPreferencesView(appState: appState)
-                case .none:
-                    ControllerPreferencesView(appState: appState)
+                    DiagnosticsWorkspaceView(appState: appState)
                 }
             }
-            .navigationTitle(selectedSection?.title ?? "Settings")
+            .navigationTitle(selection.section.title)
         }
         .toolbar {
             ToolbarItem(placement: .navigation) {
@@ -148,29 +107,33 @@ struct PreferencesView: View {
         }
     }
 
-    private var selectedSection: PreferencesSection? {
-        PreferencesSection(rawValue: storedSelection) ?? .controller
-    }
-
-    private var selectionBinding: Binding<PreferencesSection?> {
+    private var sectionBinding: Binding<WorkspaceSection?> {
         Binding(
-            get: { selectedSection },
-            set: { newValue in
-                storedSelection = newValue?.rawValue ?? PreferencesSection.controller.rawValue
-            }
+            get: { selection.section },
+            set: { selection.section = $0 ?? .controller }
         )
     }
 }
 
-struct ControllerPreferencesView: View {
+struct ControllerWorkspaceView: View {
     @ObservedObject var appState: AppState
-    @ObservedObject var controllerManager: ControllerManager
-    @ObservedObject var configStore: ConfigStore
+    @ObservedObject private var controllerManager: ControllerManager
+    @ObservedObject private var configStore: ConfigStore
+    @ObservedObject private var selection: WorkspaceSelection
+
+    @State private var inspectorAction: ActionDef = .init()
 
     init(appState: AppState) {
         self.appState = appState
         self.controllerManager = appState.controllerManager
         self.configStore = appState.configStore
+        self.selection = appState.workspaceSelection
+    }
+
+    private struct InspectorTarget: Equatable {
+        let profile: String
+        let context: String
+        let button: String?
     }
 
     private var controllerType: ControllerType {
@@ -178,76 +141,142 @@ struct ControllerPreferencesView: View {
         return ControllerType.detect(name: active.name, vendor: active.vendor)
     }
 
+    private var activeProfile: String {
+        configStore.activeProfileName()
+    }
+
+    private var inspectorTarget: InspectorTarget {
+        InspectorTarget(profile: activeProfile, context: selection.editedContext, button: selection.selectedButton)
+    }
+
     var body: some View {
-        let activeProfile = configStore.activeProfileName()
-        let context = "default"
-        let availableViews = controllerType.availableViews
-        let viewInstruction = controllerType.supportsVisualEditor
-            ? "Click a button to edit its binding"
-            : "Use the Keybinds tab to edit mappings for this controller."
-        let pressedNow = controllerManager.pressed.sorted().joined(separator: ", ")
-        let lastButton = controllerManager.lastEvent?.button ?? "—"
+        TimelineView(.periodic(from: .now, by: 0.5)) { _ in
+            let focus = configStore.currentFocusStatus()
+            let availableContexts = configStore.contextKeys(forProfile: activeProfile)
 
-        SettingsPageScrollView(maxWidth: 900) {
-            ControllerPageHeader(
-                configStore: configStore,
-                controllerManager: controllerManager,
-                controllerType: controllerType,
-                lastButton: lastButton,
-                pressedNow: pressedNow,
-                viewInstruction: viewInstruction
-            )
+            HSplitView {
+                ControllerWorkspaceSidebar(
+                    appState: appState,
+                    controllerType: controllerType,
+                    focus: focus,
+                    availableContexts: availableContexts,
+                    openKeybinds: { selection.section = .keybinds }
+                )
+                .frame(minWidth: 290, idealWidth: 320, maxWidth: 360)
 
-            ForEach(availableViews) { side in
-                SettingsSectionCard(
-                    availableViews.count > 1 ? side.label : "Controller Map",
-                    systemImage: side == .front ? "gamecontroller" : "rectangle.3.group"
-                ) {
-                    ControllerVisualView(
-                        controllerType: controllerType,
-                        viewSide: side,
-                        pressed: controllerManager.pressed,
-                        getAction: { configStore.resolve(button: $0) }
-                    ) { button, dismiss in
-                        ButtonBindingEditor(
-                            button: button,
-                            action: Binding(
-                                get: {
-                                    configStore.action(profile: activeProfile, context: context, button: button)
-                                        ?? ActionDef(type: "noop", key: nil, modifiers: nil)
-                                },
-                                set: { updated in
-                                    configStore.setAction(
-                                        profile: activeProfile,
-                                        context: context,
-                                        button: button,
-                                        action: updated
-                                    )
-                                }
-                            ),
-                            onDelete: {
-                                configStore.deleteAction(profile: activeProfile, context: context, button: button)
-                            },
-                            onDismiss: dismiss
-                        )
-                    }
-                    .aspectRatio(aspectRatio(for: side), contentMode: .fit)
-                    .frame(maxWidth: .infinity)
-                }
+                ControllerVisualPane(
+                    controllerType: controllerType,
+                    controllerManager: controllerManager,
+                    configStore: configStore,
+                    profile: activeProfile,
+                    context: selection.editedContext,
+                    selectedButton: $selection.selectedButton,
+                    openKeybinds: { selection.section = .keybinds }
+                )
+                .frame(minWidth: 460, idealWidth: 620, maxWidth: .infinity)
+
+                ControllerInspectorPane(
+                    button: selection.selectedButton,
+                    action: $inspectorAction,
+                    inheritedAction: inheritedAction(for: selection.selectedButton),
+                    onClearSelection: { selection.selectedButton = nil },
+                    onDelete: deleteSelectedAction
+                )
+                .frame(minWidth: 340, idealWidth: 380, maxWidth: 420)
+            }
+            .onAppear {
+                syncEditedContext(fallbackContext: focus.context)
+                syncInspectorAction()
+            }
+            .onChange(of: activeProfile) { _, _ in
+                syncEditedContext(fallbackContext: focus.context)
+                syncInspectorAction()
+            }
+            .onChange(of: selection.editedContext) { _, _ in
+                syncInspectorAction()
+            }
+            .onChange(of: selection.selectedButton) { _, _ in
+                syncInspectorAction()
+            }
+            .onChange(of: controllerManager.lastEvent?.id) { _, _ in
+                handleLearnModeEvent()
+            }
+            .onChange(of: inspectorAction) { _, updated in
+                persistInspectorAction(updated)
             }
         }
     }
 
-    private func aspectRatio(for side: ControllerViewSide) -> CGFloat {
-        if let box = controllerType.viewBox(for: side), box.height > 0 {
-            return box.width / box.height
-        }
-        return 590.0 / 410.0
+    private func syncEditedContext(fallbackContext: String) {
+        let contexts = configStore.contextKeys(forProfile: activeProfile)
+        let fallback = contexts.contains(fallbackContext) ? fallbackContext : "default"
+        selection.ensureValidContext(contexts, fallback: fallback)
     }
 
+    private func syncInspectorAction() {
+        guard let button = selection.selectedButton else {
+            inspectorAction = .init()
+            return
+        }
+        inspectorAction = configStore.action(profile: activeProfile, context: selection.editedContext, button: button) ?? .init()
+    }
+
+    private func handleLearnModeEvent() {
+        guard selection.isLearningButton,
+              let event = controllerManager.lastEvent,
+              event.state == "Pressed"
+        else { return }
+
+        selection.isLearningButton = false
+        selection.selectedButton = event.button
+    }
+
+    private func persistInspectorAction(_ updated: ActionDef) {
+        guard let button = selection.selectedButton else { return }
+
+        let existing = configStore.action(profile: activeProfile, context: selection.editedContext, button: button)
+        if normalized(action: updated) == normalized(action: existing) {
+            return
+        }
+
+        if isNoop(updated) {
+            if existing != nil {
+                configStore.deleteAction(profile: activeProfile, context: selection.editedContext, button: button)
+            }
+            return
+        }
+
+        configStore.setAction(
+            profile: activeProfile,
+            context: selection.editedContext,
+            button: button,
+            action: updated
+        )
+    }
+
+    private func deleteSelectedAction() {
+        guard let button = selection.selectedButton else { return }
+        configStore.deleteAction(profile: activeProfile, context: selection.editedContext, button: button)
+        inspectorAction = .init()
+    }
+
+    private func inheritedAction(for button: String?) -> ActionDef? {
+        guard let button, selection.editedContext != "default" else { return nil }
+        return configStore.action(profile: activeProfile, context: "default", button: button)
+    }
+
+    private func isNoop(_ action: ActionDef) -> Bool {
+        action.type.lowercased() == "noop"
+    }
+
+    private func normalized(action: ActionDef?) -> ActionDef? {
+        guard var action else { return nil }
+        action.type = action.type.lowercased()
+        return action
+    }
 }
 
-struct ProfilesPreferencesView: View {
+struct ProfilesWorkspaceView: View {
     @ObservedObject var appState: AppState
     @State private var selectedProfile: String? = nil
     @State private var errorMessage: String? = nil
@@ -404,7 +433,7 @@ struct ProfilesPreferencesView: View {
     }
 }
 
-struct DiagnosticsPreferencesView: View {
+struct DiagnosticsWorkspaceView: View {
     @ObservedObject var appState: AppState
     @ObservedObject private var store: ConfigStore
     @ObservedObject private var controller: ControllerManager
@@ -534,20 +563,17 @@ struct DiagnosticsPreferencesView: View {
     }
 }
 
-struct KeybindsPreferencesView: View {
+struct KeybindsWorkspaceView: View {
     @ObservedObject var appState: AppState
     @ObservedObject var store: ConfigStore
-    @ObservedObject var controller: ControllerManager
     @State private var profile: String = ""
     @State private var context: String = "default"
-    @State private var learnNextButton: Bool = false
     @State private var selectedButton: String? = nil
     @State private var errorMessage: String? = nil
 
     init(appState: AppState) {
         self.appState = appState
         self.store = appState.configStore
-        self.controller = appState.controllerManager
     }
 
     var body: some View {
@@ -561,7 +587,7 @@ struct KeybindsPreferencesView: View {
 
         SettingsPageScrollView(maxWidth: 920) {
             SettingsPageHeader(
-                subtitle: "Edit mappings by profile and app context, or learn the next button from the controller."
+                subtitle: "Edit mappings by profile and app context, or use the controller workspace for visual editing."
             )
 
             SettingsSectionCard("Editing Scope", systemImage: "slider.horizontal.3") {
@@ -593,23 +619,11 @@ struct KeybindsPreferencesView: View {
                     .frame(maxWidth: 260)
 
                     Spacer()
-
-                    Toggle("Learn next button", isOn: $learnNextButton)
-                        .toggleStyle(.switch)
                 }
 
                 HStack(spacing: 8) {
                     StatusPill(text: editingProfile, color: .blue)
                     StatusPill(text: store.contextLabel(editingContext), color: .secondary)
-                    if learnNextButton {
-                        StatusPill(text: "Learning", color: .green)
-                    }
-                }
-
-                if learnNextButton {
-                    Text("Press a controller button to select or create a mapping.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
                 }
             }
 
@@ -624,7 +638,7 @@ struct KeybindsPreferencesView: View {
                             message: "Button name (e.g. cross, dpad_up):"
                         )
                         guard let btn else { return }
-                        let action = ActionDef(type: "keystroke", key: "return", modifiers: nil)
+                        let action = ActionDef(type: "noop", key: nil, modifiers: nil)
                         store.setAction(profile: editingProfile, context: editingContext, button: btn, action: action)
                         selectedButton = btn
                     } label: {
@@ -636,7 +650,7 @@ struct KeybindsPreferencesView: View {
                     ContentUnavailableView(
                         "No Mappings Yet",
                         systemImage: "keyboard.badge.ellipsis",
-                        description: Text("Add a button manually or enable learning and press a controller button.")
+                        description: Text("Add a button manually or use the Controller section for visual editing.")
                     )
                     .frame(maxWidth: .infinity, minHeight: 220)
                 } else {
@@ -686,17 +700,6 @@ struct KeybindsPreferencesView: View {
                 profile = active
             }
         }
-        .onChange(of: controller.lastEvent?.id) { _, _ in
-            guard learnNextButton, let event = controller.lastEvent, event.state == "Pressed" else { return }
-            learnNextButton = false
-            let btn = event.button
-
-            if store.action(profile: editingProfile, context: editingContext, button: btn) == nil {
-                let action = ActionDef(type: "keystroke", key: "return", modifiers: nil)
-                store.setAction(profile: editingProfile, context: editingContext, button: btn, action: action)
-            }
-            selectedButton = btn
-        }
         .alert("Keybinds Error", isPresented: Binding(
             get: { errorMessage != nil },
             set: { showing in if !showing { errorMessage = nil } }
@@ -708,7 +711,7 @@ struct KeybindsPreferencesView: View {
     }
 }
 
-private struct SettingsSidebarSummary: View {
+private struct WorkspaceSidebarSummary: View {
     @ObservedObject var appState: AppState
     @ObservedObject private var controller: ControllerManager
 
@@ -764,8 +767,8 @@ private struct SettingsSidebarSummary: View {
     }
 }
 
-private struct SettingsSidebarRow: View {
-    let section: PreferencesSection
+private struct WorkspaceSidebarRow: View {
+    let section: WorkspaceSection
 
     var body: some View {
         HStack(spacing: 10) {
@@ -804,69 +807,301 @@ private struct SettingsPageScrollView<Content: View>: View {
     }
 }
 
-private struct ControllerPageHeader: View {
-    @ObservedObject var configStore: ConfigStore
-    @ObservedObject var controllerManager: ControllerManager
+private struct ControllerWorkspaceSidebar: View {
+    @ObservedObject var appState: AppState
     let controllerType: ControllerType
-    let lastButton: String
-    let pressedNow: String
-    let viewInstruction: String
+    let focus: AppFocus.Status
+    let availableContexts: [String]
+    let openKeybinds: () -> Void
+
+    @ObservedObject private var configStore: ConfigStore
+    @ObservedObject private var controllerManager: ControllerManager
+    @ObservedObject private var selection: WorkspaceSelection
+
+    init(
+        appState: AppState,
+        controllerType: ControllerType,
+        focus: AppFocus.Status,
+        availableContexts: [String],
+        openKeybinds: @escaping () -> Void
+    ) {
+        self.appState = appState
+        self.controllerType = controllerType
+        self.focus = focus
+        self.availableContexts = availableContexts
+        self.openKeybinds = openKeybinds
+        self.configStore = appState.configStore
+        self.controllerManager = appState.controllerManager
+        self.selection = appState.workspaceSelection
+    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 14) {
-                Picker("Preferred", selection: Binding(
-                    get: { configStore.preferredController() },
-                    set: { configStore.setPreferredController($0) }
-                )) {
-                    Text("Auto").tag("auto")
-                    Text("DualSense").tag("dualsense")
-                    Text("Pro Controller").tag("pro_controller")
-                }
-                .frame(maxWidth: 240)
+        let activeProfile = configStore.activeProfileName()
+        let pressedNow = controllerManager.pressed.sorted().joined(separator: ", ")
+        let lastButton = controllerManager.lastEvent?.button ?? "—"
+        let explicitButtons = configStore.buttons(forProfile: activeProfile, context: selection.editedContext)
+        let accessibilityGranted = configStore.accessibilityPermissionGranted()
 
-                Picker("Active", selection: Binding(
-                    get: { controllerManager.activeController?.id ?? "" },
-                    set: { controllerManager.setActiveController(id: $0.isEmpty ? nil : $0) }
-                )) {
-                    Text("—").tag("")
-                    ForEach(controllerManager.controllers) { c in
-                        Text(c.vendor != nil ? "\(c.name) (\(c.vendor!))" : c.name).tag(c.id)
+        ScrollView(.vertical) {
+            VStack(alignment: .leading, spacing: 16) {
+                SettingsSectionCard("Editing Scope", systemImage: "slider.horizontal.3") {
+                    Picker("Active profile", selection: Binding(
+                        get: { activeProfile },
+                        set: { configStore.setActiveProfile($0) }
+                    )) {
+                        ForEach(configStore.profileNames(), id: \.self) { name in
+                            Text(name).tag(name)
+                        }
+                    }
+
+                    Picker("Edited context", selection: Binding(
+                        get: { selection.editedContext },
+                        set: { selection.editedContext = $0 }
+                    )) {
+                        ForEach(availableContexts, id: \.self) { context in
+                            Text(configStore.contextLabel(context)).tag(context)
+                        }
+                    }
+
+                    HStack(spacing: 8) {
+                        StatusPill(text: configStore.contextLabel(selection.editedContext), color: .blue)
+                        StatusPill(text: "Live: \(configStore.contextLabel(focus.context))", color: .secondary)
+                    }
+
+                    Button("Use Current App Context") {
+                        selection.editedContext = focus.context
+                    }
+                    .buttonStyle(.bordered)
+
+                    if controllerType.supportsVisualEditor {
+                        Toggle("Learn next button", isOn: $selection.isLearningButton)
+                            .toggleStyle(.switch)
+
+                        if selection.isLearningButton {
+                            Text("Press a controller button to select it in the inspector.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
                     }
                 }
-                .frame(maxWidth: 340)
 
-                Spacer(minLength: 0)
+                SettingsSectionCard("Controller", systemImage: "gamecontroller") {
+                    Picker("Preferred controller", selection: Binding(
+                        get: { configStore.preferredController() },
+                        set: { configStore.setPreferredController($0) }
+                    )) {
+                        Text("Auto").tag("auto")
+                        Text("DualSense").tag("dualsense")
+                        Text("Pro Controller").tag("pro_controller")
+                    }
 
-                HStack(spacing: 6) {
-                    StatusPill(text: controllerType.displayName, color: .secondary)
+                    Picker("Active device", selection: Binding(
+                        get: { controllerManager.activeController?.id ?? "" },
+                        set: { controllerManager.setActiveController(id: $0.isEmpty ? nil : $0) }
+                    )) {
+                        Text("—").tag("")
+                        ForEach(controllerManager.controllers) { controller in
+                            Text(controller.vendor != nil ? "\(controller.name) (\(controller.vendor!))" : controller.name)
+                                .tag(controller.id)
+                        }
+                    }
+
+                    HStack(spacing: 8) {
+                        StatusPill(text: controllerType.displayName, color: .secondary)
+                        if controllerManager.activeController == nil {
+                            StatusPill(text: "No Controller", color: .orange)
+                        }
+                    }
+
+                    DiagnosticsValueRow(title: "Last button", value: lastButton, monospaced: true)
+                    DiagnosticsValueRow(title: "Pressed now", value: pressedNow.isEmpty ? "—" : pressedNow, monospaced: true)
+                }
+
+                SettingsSectionCard("Setup", systemImage: "checklist") {
+                    if !accessibilityGranted {
+                        SetupHint(
+                            title: "Accessibility permission is required",
+                            detail: "Grant access before expecting macOS keystrokes to fire."
+                        )
+                        Button("Request Accessibility Access") {
+                            configStore.ensureAccessibilityPermission()
+                        }
+                    }
+
                     if controllerManager.activeController == nil {
-                        StatusPill(text: "No Controller", color: .orange)
+                        SetupHint(
+                            title: "No active controller connected",
+                            detail: "You can still edit bindings, but live input and learn mode need a connected controller."
+                        )
+                    }
+
+                    if !controllerType.supportsVisualEditor {
+                        SetupHint(
+                            title: "\(controllerType.displayName) uses the list editor",
+                            detail: "This controller does not have a visual map yet. Use the Keybinds section for bulk editing."
+                        )
+                        Button("Open Keybinds") {
+                            openKeybinds()
+                        }
+                    }
+
+                    if explicitButtons.isEmpty {
+                        SetupHint(
+                            title: "No explicit mappings in this context",
+                            detail: "Buttons will fall back to Global mappings until you add a context-specific override."
+                        )
+                    }
+
+                    if accessibilityGranted,
+                       controllerManager.activeController != nil,
+                       controllerType.supportsVisualEditor,
+                       !explicitButtons.isEmpty
+                    {
+                        SetupHint(
+                            title: "Ready to edit",
+                            detail: "Choose a button on the controller map or enable learn mode to drive the inspector."
+                        )
                     }
                 }
             }
+            .padding(16)
+        }
+        .scrollEdgeEffectStyle(.soft, for: .top)
+    }
+}
 
-            HStack(spacing: 6) {
-                Text(viewInstruction)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Spacer(minLength: 8)
-                Text("Last:")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Text(lastButton)
-                    .font(.system(size: 12, design: .monospaced))
-                if !pressedNow.isEmpty {
-                    Text("•")
-                        .foregroundStyle(.tertiary)
-                    Text(pressedNow)
-                        .font(.system(size: 12, design: .monospaced))
-                        .lineLimit(1)
-                        .truncationMode(.tail)
+private struct ControllerVisualPane: View {
+    let controllerType: ControllerType
+    @ObservedObject var controllerManager: ControllerManager
+    @ObservedObject var configStore: ConfigStore
+    let profile: String
+    let context: String
+    @Binding var selectedButton: String?
+    let openKeybinds: () -> Void
+
+    var body: some View {
+        ScrollView(.vertical) {
+            VStack(alignment: .leading, spacing: 16) {
+                SettingsPageHeader(
+                    subtitle: controllerType.supportsVisualEditor
+                        ? "Live controller view for \(configStore.contextLabel(context)). Select a button to inspect or override its mapping."
+                        : "This controller falls back to the list editor. The live button stream still appears in Diagnostics."
+                )
+
+                if controllerType.supportsVisualEditor {
+                    ForEach(controllerType.availableViews) { side in
+                        SettingsSectionCard(
+                            controllerType.availableViews.count > 1 ? side.label : "Controller Map",
+                            systemImage: side == .front ? "gamecontroller" : "rectangle.3.group"
+                        ) {
+                            ControllerVisualView(
+                                controllerType: controllerType,
+                                viewSide: side,
+                                pressed: controllerManager.pressed,
+                                selectedButton: selectedButton,
+                                getAction: { button in
+                                    configStore.action(profile: profile, context: context, button: button)
+                                },
+                                onSelectButton: { selectedButton = $0 }
+                            )
+                            .aspectRatio(aspectRatio(for: side), contentMode: .fit)
+                            .frame(maxWidth: .infinity)
+                        }
+                    }
+                } else {
+                    SettingsSectionCard("Controller Map", systemImage: "gamecontroller") {
+                        ContentUnavailableView(
+                            "\(controllerType.displayName) visual editor unavailable",
+                            systemImage: "gamecontroller",
+                            description: Text("Open Keybinds to edit mappings for this controller.")
+                        )
+                        .frame(maxWidth: .infinity, minHeight: 320)
+
+                        Button("Open Keybinds") {
+                            openKeybinds()
+                        }
+                        .buttonStyle(.glassProminent)
+                    }
                 }
             }
+            .padding(16)
+            .frame(maxWidth: 860, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
         }
-        .padding(.bottom, 4)
+        .scrollEdgeEffectStyle(.soft, for: .top)
+    }
+
+    private func aspectRatio(for side: ControllerViewSide) -> CGFloat {
+        if let box = controllerType.viewBox(for: side), box.height > 0 {
+            return box.width / box.height
+        }
+        return 590.0 / 410.0
+    }
+}
+
+private struct ControllerInspectorPane: View {
+    let button: String?
+    @Binding var action: ActionDef
+    let inheritedAction: ActionDef?
+    let onClearSelection: () -> Void
+    let onDelete: () -> Void
+
+    var body: some View {
+        ScrollView(.vertical) {
+            VStack(alignment: .leading, spacing: 16) {
+                SettingsPageHeader(
+                    subtitle: "The inspector edits the explicit mapping for the selected button in the current context."
+                )
+
+                SettingsSectionCard("Binding Inspector", systemImage: "sidebar.right") {
+                    if let button {
+                        if let inheritedAction {
+                            DiagnosticsValueRow(
+                                title: "Global fallback",
+                                value: ActionFormatter.format(inheritedAction),
+                                monospaced: true
+                            )
+                        }
+
+                        ButtonBindingEditor(
+                            button: button,
+                            action: $action,
+                            onDelete: onDelete
+                        )
+
+                        Button("Clear Selection") {
+                            onClearSelection()
+                        }
+                        .buttonStyle(.bordered)
+                    } else {
+                        ContentUnavailableView(
+                            "No Button Selected",
+                            systemImage: "cursorarrow.click",
+                            description: Text("Select a button from the controller map to inspect or override its mapping.")
+                        )
+                        .frame(maxWidth: .infinity, minHeight: 320)
+                    }
+                }
+            }
+            .padding(16)
+        }
+        .scrollEdgeEffectStyle(.soft, for: .top)
+    }
+}
+
+private struct SetupHint: View {
+    let title: String
+    let detail: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(.subheadline.weight(.medium))
+            Text(detail)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
     }
 }
 

@@ -12,6 +12,7 @@ final class AppState: ObservableObject {
 
     let configStore = ConfigStore()
     let controllerManager = ControllerManager()
+    let workspaceSelection = WorkspaceSelection()
 
     init() {
         isEnabled = UserDefaults.standard.object(forKey: Self.isEnabledDefaultsKey) as? Bool ?? true

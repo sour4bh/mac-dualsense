@@ -59,12 +59,10 @@ struct MenuView: View {
                         .toggleStyle(.switch)
 
                     Button {
-                        NSApp.activate(ignoringOtherApps: true)
-                        openWindow(id: "settings")
+                        openWorkspace()
                     } label: {
-                        Label("Settings…", systemImage: "gearshape")
+                        Label("Open mac-dualsense…", systemImage: "macwindow")
                     }
-                    .keyboardShortcut(",", modifiers: [.command])
                     .buttonStyle(.glassProminent)
 
                     HStack(spacing: 8) {
@@ -101,6 +99,13 @@ struct MenuView: View {
             return "\(activeController.name) (\(vendor))"
         }
         return activeController.name
+    }
+
+    private func openWorkspace() {
+        NSApp.activate(ignoringOtherApps: true)
+        Task {
+            try? await openWindow(id: WorkspaceRootView.windowID, sharingBehavior: .required)
+        }
     }
 }
 
