@@ -1,6 +1,6 @@
-# CLAUDE.md
+# AGENTS.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Instructions for coding agents working in this repository.
 
 ## Overview
 
@@ -86,3 +86,11 @@ No formal test suite. Validate changes by building and running the app, connecti
 ## Permissions
 
 Requires macOS Accessibility permission: System Settings → Privacy & Security → Accessibility → enable **mac-dualsense**
+
+This app injects keystrokes, so verify Accessibility permission is granted and be deliberate about new mappings.
+
+## Commits & Pull Requests
+
+- Short, imperative subjects; conventional prefixes (`feat:`, `fix:`) are welcome, as used in history.
+- A PR states what changed, how it was tested on macOS (controller plus target app), and any updates to `native/Sources/MacDualSense/Resources/mappings.yaml` or bundle IDs in `native/Sources/MacDualSense/AppFocus.swift`.
+
