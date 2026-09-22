@@ -6,6 +6,8 @@ struct WorkspaceRootView: View {
     let onFirstAppearance: () -> Void
     @AppStorage("setup.completed") private var setupCompleted = false
     @State private var showsSetup = false
+    @Environment(\.openWindow) private var openWindow
+    @Environment(\.openSettings) private var openSettings
 
     var body: some View {
         WorkspaceView(appState: appState)
@@ -20,13 +22,20 @@ struct WorkspaceRootView: View {
                 #if DEBUG
                 if DemoCapture.outputDirectory != nil {
                     showsSetup = false
-                    DemoCapture.start(appState: appState)
+                    DemoCapture.start(appState: appState,
+                        showSetup: { showsSetup = true }, hideSetup: { showsSetup = false },
+                        reopenWorkspace: { openWindow(id: Self.windowID) },
+                        openSettings: { openSettings() })
                 }
                 #endif
                 NSApp.setActivationPolicy(.regular)
                 NSApp.activate(ignoringOtherApps: true)
             }
+            .onChange(of: showsSetup) { _, visible in
+                appState.workspaceSelection.isTestingInput = visible
+            }
             .onDisappear {
+                appState.workspaceSelection.isTestingInput = false
                 appState.workspaceSelection.isLearningButton = false
                 appState.workspaceSelection.isRecordingShortcut = false
                 NSApp.setActivationPolicy(.accessory)

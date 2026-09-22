@@ -1,1 +1,1 @@
-Captured actual app views using an isolated configuration; no controller connected.
+Captured actual app views using an isolated configuration; no controller connected. Setup suppresses input, closing the workspace keeps mappings enabled, reopening succeeds, and the native Settings scene opens.

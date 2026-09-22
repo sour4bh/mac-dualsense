@@ -20,7 +20,7 @@ enum DemoCapture {
         return AppState(configStore: store, controllerManager: ControllerManager(discover: false), defaults: defaults)
     }
 
-    static func start(appState: AppState) {
+    static func start(appState: AppState, showSetup: @escaping () -> Void, hideSetup: @escaping () -> Void, reopenWorkspace: @escaping () -> Void, openSettings: @escaping () -> Void) {
         guard !started, let directory = outputDirectory else { return }
         started = true
         Task { @MainActor in
@@ -57,7 +57,24 @@ enum DemoCapture {
                 try await snapshot(window, to: directory.appendingPathComponent("inspector-compact.png"))
                 appState.workspaceSelection.section = .controller
                 try await snapshot(window, to: directory.appendingPathComponent("controller-compact.png"))
-                try "Captured actual app views using an isolated configuration; no controller connected.\n".write(to: directory.appendingPathComponent("capture.txt"), atomically: true, encoding: .utf8)
+                showSetup()
+                try await Task.sleep(for: .milliseconds(600))
+                guard window.attachedSheet != nil, appState.workspaceSelection.isTestingInput else { throw CaptureError.setupNotPresented }
+                try await snapshot(window, to: directory.appendingPathComponent("setup-light.png"))
+                hideSetup()
+                try await Task.sleep(for: .milliseconds(600))
+                guard !appState.workspaceSelection.isTestingInput else { throw CaptureError.captureStillActive }
+                window.close()
+                try await Task.sleep(for: .milliseconds(600))
+                guard appState.isEnabled else { throw CaptureError.mappingsPaused }
+                reopenWorkspace()
+                try await Task.sleep(for: .seconds(1))
+                guard let reopened = NSApp.windows.first(where: { $0.isVisible && $0.frame.width >= 1000 }) else { throw CaptureError.noView }
+                openSettings()
+                try await Task.sleep(for: .milliseconds(600))
+                guard let settings = NSApp.windows.first(where: { $0.isVisible && $0 !== reopened && $0.title.contains("Settings") }) else { throw CaptureError.settingsNotPresented }
+                try await snapshot(settings, to: directory.appendingPathComponent("settings-light.png"))
+                try "Captured actual app views using an isolated configuration; no controller connected. Setup suppresses input, closing the workspace keeps mappings enabled, reopening succeeds, and the native Settings scene opens.\n".write(to: directory.appendingPathComponent("capture.txt"), atomically: true, encoding: .utf8)
                 try? FileManager.default.removeItem(at: appState.configStore.configFileURL.deletingLastPathComponent())
                 NSApp.terminate(nil)
             } catch {
@@ -68,7 +85,7 @@ enum DemoCapture {
     }
 
     private static func snapshot(_ window: NSWindow, to url: URL) async throws {
-        window.makeKeyAndOrderFront(nil)
+        if window.sheetParent == nil { window.makeKeyAndOrderFront(nil) }
         NSApp.activate(ignoringOtherApps: true)
         try await Task.sleep(for: .seconds(1.2))
         Logger.shared.info("Capture \(url.lastPathComponent) frame=\(window.frame) minimum=\(window.minSize) contentMinimum=\(window.contentMinSize) fitting=\(window.contentView?.fittingSize ?? .zero)")
@@ -87,6 +104,6 @@ enum DemoCapture {
         try png.write(to: url)
     }
 
-    private enum CaptureError: Error { case noView, noBitmap }
+    private enum CaptureError: Error { case noView, noBitmap, setupNotPresented, captureStillActive, mappingsPaused, settingsNotPresented }
 }
 #endif
