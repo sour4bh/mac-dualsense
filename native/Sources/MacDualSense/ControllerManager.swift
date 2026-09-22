@@ -26,7 +26,8 @@ final class ControllerManager: ObservableObject {
     var isEnabled: (() -> Bool)?
     var preferredController: (() -> String)?
     var resolveAction: ((String) -> ActionDef?)?
-    var accessibilityPrompt: (() -> Void)?
+    var canSendInput: (() -> Bool)?
+    var isCapturing: (() -> Bool)?
     var wisprMode: (() -> String)?
     var wisprHoldMs: (() -> Int)?
     var hapticsEnabled: (() -> Bool)?
@@ -34,15 +35,17 @@ final class ControllerManager: ObservableObject {
     var trackpadEnabled: (() -> Bool)?
     var trackpadSettings: (() -> TrackpadSettings)?
 
-    private let keySender = KeySender()
-    private let mouseSender = MouseSender()
+    private let inputRouter: InputRouter
+    private let mouseSender: any MouseOutput
     private let haptics = ControllerHaptics()
-    private var wisprHeldButton: String? = nil
     private var controllerRefs: [String: GCController] = [:]
     private var lastPrimary: (x: Double, y: Double)? = nil
     private var lastSecondary: (x: Double, y: Double)? = nil
 
-    init() {
+    init(keyboard: any KeyboardOutput = KeySender(), mouse: any MouseOutput = MouseSender(), discover: Bool = true) {
+        inputRouter = InputRouter(keyboard: keyboard)
+        mouseSender = mouse
+        guard discover else { return }
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(controllerDidConnect(_:)),
@@ -59,9 +62,9 @@ final class ControllerManager: ObservableObject {
         GCController.startWirelessControllerDiscovery {}
     }
 
-    deinit {
+    isolated deinit {
         NotificationCenter.default.removeObserver(self)
-        keySender.releaseAllModifiers()
+        inputRouter.releaseAll()
         mouseSender.releaseAllButtons()
     }
 
@@ -84,7 +87,6 @@ final class ControllerManager: ObservableObject {
     }
 
     private func refreshConnectedControllers() {
-        let previousActiveID = activeController?.id
         let current = GCController.controllers()
         Logger.shared.info("refreshConnectedControllers: found \(current.count) controller(s)")
         var next: [ConnectedController] = []
@@ -101,8 +103,15 @@ final class ControllerManager: ObservableObject {
             )
             refs[stableID] = c
         }
-        controllers = next
         controllerRefs = refs
+        updateConnectedControllers(next)
+        attachHandlers()
+    }
+
+    // The same snapshot path is used by discovery and isolated lifecycle tests.
+    func updateConnectedControllers(_ next: [ConnectedController]) {
+        let previousActiveID = activeController?.id
+        controllers = next
         if activeController == nil || (activeController != nil && !next.contains(activeController!)) {
             activeController = pickActiveController()
             resetTransientState(releaseModifiers: previousActiveID != nil)
@@ -111,7 +120,6 @@ final class ControllerManager: ObservableObject {
         if let activeController, activeController.id != previousActiveID {
             triggerHaptic(name: "connect")
         }
-        attachHandlers()
     }
 
     private func activeGCController() -> GCController? {
@@ -119,12 +127,19 @@ final class ControllerManager: ObservableObject {
         return controllerRefs[activeController.id]
     }
 
+    func releaseInputs() {
+        resetTransientState(releaseModifiers: true)
+    }
+
+    private var allowsInput: Bool {
+        isEnabled?() == true && isCapturing?() != true && canSendInput?() == true
+    }
+
     private func resetTransientState(releaseModifiers: Bool) {
         pressed.removeAll()
-        wisprHeldButton = nil
         releaseTrackpadState()
         if releaseModifiers {
-            keySender.releaseAllModifiers()
+            inputRouter.releaseAll()
         }
     }
 
@@ -141,8 +156,8 @@ final class ControllerManager: ObservableObject {
             Logger.shared.info("  Controller \(id): \(profile.buttons.count) buttons, \(profile.dpads.count) dpads")
 
             for (name, button) in profile.buttons {
-                button.pressedChangedHandler = { [weak self] _, _, pressed in
-                    Task { @MainActor in
+                button.pressedChangedHandler = { @Sendable [weak self] _, _, pressed in
+                    DispatchQueue.main.async {
                         self?.handle(controllerID: id, buttonName: name, pressed: pressed)
                     }
                 }
@@ -150,35 +165,35 @@ final class ControllerManager: ObservableObject {
 
             if let dpad = profile.dpads[GCInputDirectionPad] {
                 Logger.shared.info("  D-pad found, attaching handlers")
-                dpad.up.pressedChangedHandler = { [weak self] _, _, pressed in
-                    Task { @MainActor in self?.handle(controllerID: id, buttonName: "dpad_up", pressed: pressed) }
+                dpad.up.pressedChangedHandler = { @Sendable [weak self] _, _, pressed in
+                    DispatchQueue.main.async { self?.handle(controllerID: id, buttonName: "dpad_up", pressed: pressed) }
                 }
-                dpad.down.pressedChangedHandler = { [weak self] _, _, pressed in
-                    Task { @MainActor in self?.handle(controllerID: id, buttonName: "dpad_down", pressed: pressed) }
+                dpad.down.pressedChangedHandler = { @Sendable [weak self] _, _, pressed in
+                    DispatchQueue.main.async { self?.handle(controllerID: id, buttonName: "dpad_down", pressed: pressed) }
                 }
-                dpad.left.pressedChangedHandler = { [weak self] _, _, pressed in
-                    Task { @MainActor in self?.handle(controllerID: id, buttonName: "dpad_left", pressed: pressed) }
+                dpad.left.pressedChangedHandler = { @Sendable [weak self] _, _, pressed in
+                    DispatchQueue.main.async { self?.handle(controllerID: id, buttonName: "dpad_left", pressed: pressed) }
                 }
-                dpad.right.pressedChangedHandler = { [weak self] _, _, pressed in
-                    Task { @MainActor in self?.handle(controllerID: id, buttonName: "dpad_right", pressed: pressed) }
+                dpad.right.pressedChangedHandler = { @Sendable [weak self] _, _, pressed in
+                    DispatchQueue.main.async { self?.handle(controllerID: id, buttonName: "dpad_right", pressed: pressed) }
                 }
             }
 
             if let ds = profile as? GCDualSenseGamepad {
                 Logger.shared.info("  DualSense detected, attaching continuous touchpad handlers")
-                ds.touchpadPrimary.valueChangedHandler = { [weak self] _, x, y in
-                    Task { @MainActor in
+                ds.touchpadPrimary.valueChangedHandler = { @Sendable [weak self] _, x, y in
+                    DispatchQueue.main.async {
                         self?.handleTouchpadPrimary(controllerID: id, x: Double(x), y: Double(y))
                     }
                 }
-                ds.touchpadSecondary.valueChangedHandler = { [weak self] _, x, y in
-                    Task { @MainActor in
+                ds.touchpadSecondary.valueChangedHandler = { @Sendable [weak self] _, x, y in
+                    DispatchQueue.main.async {
                         self?.handleTouchpadSecondary(controllerID: id, x: Double(x), y: Double(y))
                     }
                 }
-                ds.touchpadButton.pressedChangedHandler = { [weak self] _, _, pressed in
-                    Task { @MainActor in
-                        self?.handleTouchpadClick(controllerID: id, pressed: pressed)
+                ds.touchpadButton.pressedChangedHandler = { @Sendable [weak self] _, _, pressed in
+                    DispatchQueue.main.async {
+                        self?.handle(controllerID: id, buttonName: "touchpad", pressed: pressed)
                     }
                 }
             }
@@ -210,12 +225,13 @@ final class ControllerManager: ObservableObject {
         return nil
     }
 
-    private func handle(controllerID: String, buttonName: String, pressed: Bool) {
+    func handle(controllerID: String, buttonName: String, pressed: Bool) {
         Logger.shared.debug("handle: button=\(buttonName) pressed=\(pressed) controllerID=\(controllerID) activeID=\(activeController?.id ?? "nil")")
         guard activeController?.id == controllerID else {
             Logger.shared.debug("  -> ignored (controller mismatch)")
             return
         }
+        let mayDispatch = allowsInput
         let canonical = canonicalButton(from: buttonName) ?? buttonName
 
         if pressed {
@@ -238,97 +254,23 @@ final class ControllerManager: ObservableObject {
             recentEvents.removeFirst(recentEvents.count - 200)
         }
 
-        guard isEnabled?() == true else { return }
-
-        // Ensure we can inject keys; prompt if needed.
-        accessibilityPrompt?()
-
-        // In trackpad mode, the touchpad click is driven by handleTouchpadClick;
-        // skip the keystroke dispatch so the configured "touchpad" action doesn't double-fire.
         if canonical == "touchpad", trackpadEnabled?() == true {
+            handleTouchpadClick(pressed: pressed, mayDispatch: mayDispatch)
             return
         }
-
-        guard let actionDef else { return }
-        var shouldTriggerHaptic = false
-        var hapticName: String = "confirm"
-        switch actionDef.type.lowercased() {
-        case "keystroke":
-            if pressed, let key = actionDef.key {
-                let ok = keySender.sendKeystroke(key: key, modifiers: actionDef.modifiers)
-                shouldTriggerHaptic = true
-                hapticName = ok ? "confirm" : "error"
-            }
-        case "wispr":
-            if pressed {
-                let ok = handleWispr(button: canonical, pressed: pressed)
-                shouldTriggerHaptic = true
-                hapticName = ok ? "confirm" : "error"
-            } else {
-                _ = handleWispr(button: canonical, pressed: pressed)
-            }
-        default:
-            break
-        }
-
-        if shouldTriggerHaptic {
-            triggerHaptic(name: hapticName)
-        }
-    }
-
-    @discardableResult
-    private func handleWispr(button: String, pressed: Bool) -> Bool {
-        let mode = (wisprMode?() ?? "rcmd_hold").lowercased()
-        let holdMs = wisprHoldMs?() ?? 450
-
-        if pressed {
-            wisprHeldButton = button
-            switch mode {
-            case "cmd_right", "cmd+right", "cmd-right":
-                return keySender.sendKeystroke(key: "right", modifiers: ["cmd"])
-            case "lcmd_pulse", "pulse_lcmd":
-                DispatchQueue.global().async { [keySender] in
-                    _ = keySender.holdModifier("lcmd", holdMs: holdMs)
-                }
-                return true
-            case "lcmd_toggle", "toggle_lcmd":
-                return keySender.toggleModifier("lcmd")
-            case "lcmd_hold", "hold_lcmd":
-                return keySender.setModifier("lcmd", down: true)
-            case "rcmd_pulse", "pulse_rcmd":
-                DispatchQueue.global().async { [keySender] in
-                    _ = keySender.holdModifier("rcmd", holdMs: holdMs)
-                }
-                return true
-            case "rcmd_toggle", "toggle_rcmd":
-                return keySender.toggleModifier("rcmd")
-            case "rcmd_hold", "hold_rcmd":
-                return keySender.setModifier("rcmd", down: true)
-            case "fn_hold", "hold_fn":
-                return keySender.setModifier("fn", down: true)
-            default:
-                return keySender.sendKeystroke(key: "right", modifiers: ["cmd"])
-            }
-        } else {
-            guard wisprHeldButton == button else { return false }
-            wisprHeldButton = nil
-            switch mode {
-            case "lcmd_hold", "hold_lcmd":
-                _ = keySender.setModifier("lcmd", down: false)
-            case "rcmd_hold", "hold_rcmd":
-                _ = keySender.setModifier("rcmd", down: false)
-            case "fn_hold", "hold_fn":
-                _ = keySender.setModifier("fn", down: false)
-            default:
-                break
-            }
-            return true
+        let succeeded = inputRouter.handle(
+            button: canonical, pressed: pressed, action: actionDef,
+            mode: wisprMode?() ?? "rcmd_hold", holdMs: wisprHoldMs?() ?? 450,
+            enabled: mayDispatch
+        )
+        if pressed && mayDispatch && actionDef?.type != "noop" && actionDef != nil {
+            triggerHaptic(name: succeeded ? "confirm" : "error")
         }
     }
 
     private func handleTouchpadPrimary(controllerID: String, x: Double, y: Double) {
         guard activeController?.id == controllerID else { return }
-        guard isEnabled?() == true, trackpadEnabled?() == true else {
+        guard allowsInput, trackpadEnabled?() == true else {
             if lastPrimary != nil || mouseSender.anyButtonDown {
                 releaseTrackpadState()
             }
@@ -367,7 +309,7 @@ final class ControllerManager: ObservableObject {
 
     private func handleTouchpadSecondary(controllerID: String, x: Double, y: Double) {
         guard activeController?.id == controllerID else { return }
-        guard isEnabled?() == true, trackpadEnabled?() == true else {
+        guard allowsInput, trackpadEnabled?() == true else {
             lastSecondary = nil
             return
         }
@@ -389,13 +331,12 @@ final class ControllerManager: ObservableObject {
         // Fingers moving up (y increases) with natural scroll → scroll wheel +y (content up).
         let raw = (y - prev.y) * scrollSensitivity
         let dy = natural ? raw : -raw
-        mouseSender.scroll(deltaY: dy)
+        mouseSender.scroll(deltaY: dy, deltaX: 0)
         lastSecondary = (x, y)
     }
 
-    private func handleTouchpadClick(controllerID: String, pressed: Bool) {
-        guard activeController?.id == controllerID else { return }
-        guard isEnabled?() == true, trackpadEnabled?() == true else {
+    private func handleTouchpadClick(pressed: Bool, mayDispatch: Bool) {
+        guard mayDispatch else {
             mouseSender.releaseAllButtons()
             return
         }

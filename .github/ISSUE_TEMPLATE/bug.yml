@@ -1,0 +1,32 @@
+name: Bug report
+description: Report a problem with mac-dualsense.
+body:
+  - type: textarea
+    id: behavior
+    attributes:
+      label: What happened?
+      description: Describe what you expected, what happened, and how to reproduce it.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: App version or commit
+    validations:
+      required: true
+  - type: input
+    id: macos
+    attributes:
+      label: macOS version and Mac model
+    validations:
+      required: true
+  - type: input
+    id: controller
+    attributes:
+      label: Controller and connection
+      placeholder: DualSense over Bluetooth
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Additional details
+      description: Include the target app and sanitized diagnostics. Review logs and screenshots for personal information before sharing.

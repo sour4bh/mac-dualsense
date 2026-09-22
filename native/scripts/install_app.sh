@@ -1,17 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
-
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-
-"${ROOT_DIR}/scripts/build_app.sh"
-
-APP_NAME="mac-dualsense"
-SRC_APP="${ROOT_DIR}/dist/${APP_NAME}.app"
-DST_APP="/Applications/${APP_NAME}.app"
-
-rm -rf "${DST_APP}"
-ditto "${SRC_APP}" "${DST_APP}"
-
-echo "Installed: ${DST_APP}"
-open "${DST_APP}"
-
+"$ROOT_DIR/scripts/build_app.sh"
+APP="$ROOT_DIR/dist/mac-dualsense.app"
+DESTINATION="${INSTALL_DIR:-/Applications}/mac-dualsense.app"
+pkill -x MacDualSense 2>/dev/null || true
+rm -rf "$DESTINATION"
+ditto "$APP" "$DESTINATION"
+echo "Installed: $DESTINATION"

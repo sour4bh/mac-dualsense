@@ -201,7 +201,8 @@ enum ActionFormatter {
         case "keystroke":
             return formatKeystroke(key: action.key, modifiers: action.modifiers)
         case "wispr":
-            return "🎤 Wispr"
+            return "Voice dictation"
+        case "noop": return "Disabled"
         default:
             return "Click to bind"
         }

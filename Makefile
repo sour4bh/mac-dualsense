@@ -1,23 +1,25 @@
-APP_NAME := mac-dualsense
-BUILT_APP := native/dist/$(APP_NAME).app
-INSTALLED_APP := /Applications/$(APP_NAME).app
+.PHONY: build test verify install run capture docs clean
 
-.PHONY: build install run clean
-
-## build: produce a .app bundle under native/dist/
 build:
 	./native/scripts/build_app.sh
 
-## install: build and copy into /Applications (does not launch)
-install: build
-	rm -rf "$(INSTALLED_APP)"
-	ditto "$(BUILT_APP)" "$(INSTALLED_APP)"
-	@echo "Installed: $(INSTALLED_APP)"
+test:
+	swift test --package-path native --disable-automatic-resolution
 
-## run: install and launch the app
-run: install
-	open "$(INSTALLED_APP)"
+verify: build
+	./native/scripts/verify_app.sh
 
-## clean: remove local build artifacts
+install:
+	./native/scripts/install_app.sh
+
+run:
+	./script/build_and_run.sh
+
+capture:
+	./script/capture_demo.sh
+
+docs:
+	python script/check_docs.py
+
 clean:
 	rm -rf native/.build native/dist

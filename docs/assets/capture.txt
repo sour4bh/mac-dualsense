@@ -1,0 +1,1 @@
+Captured actual app views using an isolated configuration; no controller connected.

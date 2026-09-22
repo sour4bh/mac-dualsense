@@ -77,6 +77,7 @@ struct ControllerVisualView: View {
                             getAction: getAction
                         )
                         .frame(width: scaledSize.width, height: scaledSize.height)
+                        .id(viewSide)
                     }
                     .frame(width: scaledSize.width, height: scaledSize.height)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -87,6 +88,15 @@ struct ControllerVisualView: View {
         }
         .onChange(of: viewSide) {
             hoveredButton = nil
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Controller diagram")
+        .accessibilityChildren {
+            ForEach((buttonProvider?.buttons.keys.sorted() ?? []), id: \.self) { id in
+                Button("\(id.replacingOccurrences(of: "_", with: " ")): \(ActionFormatter.format(getAction(id)))") {
+                    onSelectButton(id)
+                }
+            }
         }
     }
 

@@ -2,7 +2,6 @@
 native/.build/
 native/.swiftpm/
 native/dist/
-native/AppBundle/
 
 # App bundles
 *.app/
@@ -14,7 +13,7 @@ dist/
 # Orphaned Python-era artifacts (package removed in 8629851; files may linger on disk)
 cc_controller/
 cc_controller.egg-info/
-scripts/
+/scripts/
 .ruff_cache/
 venv/
 

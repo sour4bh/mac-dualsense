@@ -1,0 +1,84 @@
+name: Prepare signed release
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version without v (X.Y.Z)
+        required: true
+        default: 0.1.0
+      commit:
+        description: Full 40-character commit SHA from main
+        required: true
+permissions:
+  contents: read
+concurrency:
+  group: release
+  cancel-in-progress: false
+jobs:
+  release:
+    runs-on: macos-26
+    environment: release
+    permissions:
+      contents: write
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+      APP_VERSION: ${{ inputs.version }}
+      RELEASE_COMMIT: ${{ inputs.commit }}
+      SIGNING_IDENTITY: ${{ vars.SIGNING_IDENTITY }}
+      NOTARY_PROFILE: mac-dualsense-release
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      - name: Validate release inputs
+        run: |
+          [[ "$APP_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          [[ "$RELEASE_COMMIT" =~ ^[0-9a-f]{40}$ ]]
+          git merge-base --is-ancestor "$RELEASE_COMMIT" origin/main
+          git checkout --detach "$RELEASE_COMMIT"
+      - name: Test selected commit
+        run: swift test --package-path native --disable-automatic-resolution
+      - name: Import Developer ID and notarization credentials
+        env:
+          CERTIFICATE_BASE64: ${{ secrets.SIGNING_CERTIFICATE_BASE64 }}
+          CERTIFICATE_PASSWORD: ${{ secrets.SIGNING_CERTIFICATE_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+        run: |
+          : "${CERTIFICATE_BASE64:?Missing signing certificate}"
+          : "${CERTIFICATE_PASSWORD:?Missing certificate password}"
+          : "${APPLE_ID:?Missing Apple ID}"
+          : "${APPLE_TEAM_ID:?Missing Apple team ID}"
+          : "${APPLE_APP_PASSWORD:?Missing app-specific password}"
+          : "${SIGNING_IDENTITY:?Missing SIGNING_IDENTITY repository variable}"
+          KEYCHAIN="$RUNNER_TEMP/mac-dualsense.keychain-db"
+          KEYCHAIN_PASSWORD="$(openssl rand -hex 32)"
+          echo "::add-mask::$KEYCHAIN_PASSWORD"
+          printf '%s' "$CERTIFICATE_BASE64" | base64 --decode > "$RUNNER_TEMP/certificate.p12"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security import "$RUNNER_TEMP/certificate.p12" -P "$CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security list-keychains -d user -s "$KEYCHAIN"
+          xcrun notarytool store-credentials "$NOTARY_PROFILE" --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_PASSWORD" --keychain "$KEYCHAIN"
+      - name: Sign, notarize, staple, and verify final ZIP
+        run: NOTARY_KEYCHAIN="$RUNNER_TEMP/mac-dualsense.keychain-db" native/scripts/release.sh
+      - name: Create or update draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="v$APP_VERSION"
+          if gh release view "$TAG" --json isDraft >/dev/null 2>&1; then
+            [[ "$(gh release view "$TAG" --json isDraft --jq .isDraft)" == true ]]
+            gh release edit "$TAG" --draft --target "$RELEASE_COMMIT" --notes-file docs/release-notes.md
+          else
+            gh release create "$TAG" --draft --target "$RELEASE_COMMIT" --title "mac-dualsense $TAG" --notes-file docs/release-notes.md
+          fi
+          gh release upload "$TAG" "native/dist/mac-dualsense-$APP_VERSION-arm64.zip" native/dist/SHA256SUMS --clobber
+      - name: Remove signing material
+        if: always()
+        run: |
+          security delete-keychain "$RUNNER_TEMP/mac-dualsense.keychain-db" 2>/dev/null || true
+          rm -f "$RUNNER_TEMP/certificate.p12"

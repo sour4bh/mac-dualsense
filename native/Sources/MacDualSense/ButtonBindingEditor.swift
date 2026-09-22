@@ -5,19 +5,23 @@ struct ButtonBindingEditor: View {
     @Binding var action: ActionDef
     let onDelete: () -> Void
     let onDismiss: (() -> Void)?
+    let onCaptureChange: (Bool) -> Void
 
+    @Environment(\.colorScheme) private var colorScheme
     @FocusState private var isCapturing: Bool
 
     init(
         button: String,
         action: Binding<ActionDef>,
         onDelete: @escaping () -> Void,
-        onDismiss: (() -> Void)? = nil
+        onDismiss: (() -> Void)? = nil,
+        onCaptureChange: @escaping (Bool) -> Void = { _ in }
     ) {
         self.button = button
         self._action = action
         self.onDelete = onDelete
         self.onDismiss = onDismiss
+        self.onCaptureChange = onCaptureChange
     }
 
     var body: some View {
@@ -31,11 +35,14 @@ struct ButtonBindingEditor: View {
             editorCard {
                 LabeledContent("Action") {
                     Picker("", selection: typeBinding) {
-                        Text("Keystroke").tag("keystroke")
-                        Text("Wispr").tag("wispr")
-                        Text("No action").tag("noop")
+                        Text("Inherit global").tag("inherit")
+                        Text("Shortcut").tag("keystroke")
+                        Text("Voice dictation").tag("wispr")
+                        Text("Disabled").tag("noop")
                     }
+                    .id(colorScheme)
                     .labelsHidden()
+                    .accessibilityLabel("Binding action")
                     .frame(width: 160)
                 }
             }
@@ -70,7 +77,7 @@ struct ButtonBindingEditor: View {
             previewRow
 
             if isWispr {
-                Text("Wispr behavior is controlled by `settings.wispr` in the YAML config.")
+                Text("Choose your voice dictation trigger in Settings. Wispr Flow is optional and installed separately.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -81,9 +88,9 @@ struct ButtonBindingEditor: View {
                         onDelete()
                         onDismiss?()
                     } label: {
-                        Label("Unbind", systemImage: "trash")
+                        Label("Reset binding", systemImage: "arrow.uturn.backward")
                     }
-                    Text("Removes this binding so the button does nothing.")
+                    Text("Uses the global binding, if one exists.")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
@@ -101,11 +108,8 @@ struct ButtonBindingEditor: View {
         }
         .padding(18)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .onAppear {
-            if action.type.lowercased() == "keystroke" {
-                isCapturing = true
-            }
-        }
+        .onChange(of: isCapturing) { _, value in onCaptureChange(value) }
+        .onDisappear { onCaptureChange(false) }
     }
 
     // MARK: - Subviews
@@ -159,6 +163,8 @@ struct ButtonBindingEditor: View {
                     lineWidth: isCapturing ? 2 : 1
                 )
         )
+        .accessibilityLabel("Record keyboard shortcut")
+        .accessibilityHint("Select, then press a key combination")
         .focusable(true)
         .focused($isCapturing)
         .onTapGesture {
@@ -174,6 +180,7 @@ struct ButtonBindingEditor: View {
             ForEach(Self.chipOrder, id: \.canonical) { chip in
                 ModifierChip(
                     label: chip.symbol,
+                    name: chip.canonical,
                     isOn: modifierBinding(for: chip.canonical)
                 )
             }
@@ -208,10 +215,11 @@ struct ButtonBindingEditor: View {
 
     private var previewText: String {
         switch action.type.lowercased() {
+        case "inherit": return "Global fallback"
         case "noop":
-            return "Unbound"
+            return "Disabled"
         case "wispr":
-            return "🎤 Wispr"
+            return "Voice dictation"
         default:
             let formatted = ActionFormatter.formatKeystroke(key: action.key, modifiers: action.modifiers)
             if formatted == "Click to bind" {
@@ -254,7 +262,7 @@ struct ButtonBindingEditor: View {
                     action.modifiers = nil
                     isCapturing = false
                 } else {
-                    isCapturing = true
+                    isCapturing = false
                 }
             }
         )
@@ -283,6 +291,7 @@ struct ButtonBindingEditor: View {
         if let name = Self.keyName(for: keyPress) {
             action.key = name
             action.modifiers = canonicalModifiers(from: keyPress.modifiers)
+            isCapturing = false
             return .handled
         }
         return .ignored
@@ -378,6 +387,7 @@ struct ButtonBindingEditor: View {
 
 private struct ModifierChip: View {
     let label: String
+    let name: String
     @Binding var isOn: Bool
 
     var body: some View {
@@ -387,7 +397,7 @@ private struct ModifierChip: View {
             Text(label)
                 .font(.system(size: 13, weight: .semibold))
                 .frame(minWidth: 28)
-                .padding(.horizontal, 10)
+                .padding(.horizontal, 4)
                 .padding(.vertical, 6)
                 .foregroundStyle(isOn ? Color.accentColor : Color.secondary)
                 .background(
@@ -401,6 +411,8 @@ private struct ModifierChip: View {
                 )
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(["ctrl": "Control", "alt": "Option", "shift": "Shift", "cmd": "Command", "fn": "Function"][name] ?? name)
+        .accessibilityValue(isOn ? "Enabled" : "Disabled")
     }
 }
 
