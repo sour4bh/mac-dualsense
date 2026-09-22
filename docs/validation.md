@@ -9,7 +9,7 @@ This file separates automated evidence from checks requiring hardware or signing
 - GitHub Actions syntax and local documentation links.
 - Debug-only captures of the actual workspace in light/dark mode and at 1000 × 640, with isolated configuration and no controller connection.
 
-Local validation passed on macOS 26.6.2 with Xcode 27 / Swift 6.4: all 17 tests, the release-configuration ARM64 build, bundle/signature integrity checks, Actions syntax, and local documentation links. Missing signing credentials correctly stop the distribution script before building. Light/dark screenshots and the 1000 × 640 binding inspector were visually reviewed. These are development builds with ad-hoc signatures.
+Local validation passed on macOS 26.6.2 with Xcode 27 / Swift 6.4: all 17 tests, the release-configuration ARM64 build, bundle/signature integrity checks, Actions syntax, and local documentation links. Missing signing credentials correctly stop the distribution script before building. Light/dark screenshots and the 1000 × 640 binding inspector were visually reviewed. The explicit installer also passed initial installation and replacement into an isolated temporary destination; the existing configuration file was unchanged in both cases. These are development builds with ad-hoc signatures.
 
 The implementation task records CI results in its PR. CI must pass on the final release commit.
 

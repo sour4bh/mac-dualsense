@@ -18,7 +18,7 @@ for name in sorted(set(names)):
         continue
     content = re.sub(r"```.*?```", "", path.read_text(), flags=re.S)
     links = re.findall(r"\[[^\]]*\]\(([^\s)]+)(?:\s+[^)]*)?\)", content)
-    links += re.findall(r'(?:src|href)="([^"]+)"', content)
+    links += re.findall(r'(?:src|srcset|href)="([^"]+)"', content)
     for link in links:
         parts = urlsplit(link)
         if parts.scheme or parts.netloc:

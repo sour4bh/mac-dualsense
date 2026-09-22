@@ -12,7 +12,10 @@
 </p>
 <p align="center"><a href="#get-started">Get started</a> · <a href="docs/configuration.md">Configuration</a> · <a href="CONTRIBUTING.md">Contribute</a> · <a href="docs/troubleshooting.md">Help</a></p>
 
-![The mac-dualsense controller workspace in light mode](docs/assets/controller-light.png)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/controller-dark.png">
+  <img alt="The mac-dualsense controller workspace" src="docs/assets/controller-light.png">
+</picture>
 
 Scroll through a browser, switch terminal tabs, or trigger voice dictation from your controller. Mappings follow the app you’re using, with a global fallback for everything else.
 
