@@ -1,6 +1,7 @@
 import AppKit
 import Foundation
 
+@MainActor
 final class AppFocus {
     struct Status {
         let appName: String?
@@ -16,20 +17,18 @@ final class AppFocus {
     private var cachedStatus: Status?
     private var lastRead: TimeInterval = 0
 
-    // Bundle ID to context name mapping
-    private let contexts: [String: String] = [
-        "dev.warp.Warp-Stable": "warp",
-        "dev.warp.Warp": "warp",
-        "company.thebrowser.Browser": "arc",
-        "com.google.Chrome": "chrome",
-        "com.tinyspeck.slackmacgap": "slack",
-        "com.openai.chat": "chatgpt",
-        "com.anthropic.claudefordesktop": "claude",
-    ]
+    var contexts: [String: AppContext] = AppContext.defaults {
+        didSet { cachedStatus = nil }
+    }
+    private let frontmostApp: () -> (name: String?, bundleID: String?)
 
-    init(cacheTTLms: Int) {
+    init(cacheTTLms: Int, frontmostApp: @escaping () -> (name: String?, bundleID: String?) = {
+        let app = NSWorkspace.shared.frontmostApplication
+        return (app?.localizedName, app?.bundleIdentifier)
+    }) {
         self.cacheTTLms = cacheTTLms
         ttl = Double(cacheTTLms) / 1000.0
+        self.frontmostApp = frontmostApp
     }
 
     func context() -> String {
@@ -42,11 +41,11 @@ final class AppFocus {
             return cachedStatus
         }
 
-        let app = NSWorkspace.shared.frontmostApplication
+        let app = frontmostApp()
         let status = Status(
-            appName: app?.localizedName,
-            bundleID: app?.bundleIdentifier,
-            context: contexts[app?.bundleIdentifier ?? ""] ?? "default"
+            appName: app.name,
+            bundleID: app.bundleID,
+            context: contexts.first { $0.value.bundleIDs.contains(app.bundleID ?? "") }?.key ?? "default"
         )
         cachedStatus = status
         lastRead = now

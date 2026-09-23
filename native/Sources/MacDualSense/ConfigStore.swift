@@ -34,28 +34,30 @@ final class ConfigStore: ObservableObject {
 
     private let appSupportDir: URL
     private let configURL: URL
-    private let appFocus = AppFocus(cacheTTLms: 100)
+    private let appFocus: AppFocus
+    private let automaticallySaves: Bool
+    var onRoutingChange: (() -> Void)?
+    var onControllerPreferenceChange: (() -> Void)?
     private var pendingSave: DispatchWorkItem?
     private var pendingReload: DispatchWorkItem?
+    private var fileWatcher: DispatchSourceFileSystemObject?
     private var configWatcher: DispatchSourceFileSystemObject?
 
-    static let knownContexts: [(key: String, label: String)] = [
-        ("default", "Global"),
-        ("warp", "Warp"),
-        ("arc", "Arc"),
-        ("chrome", "Chrome"),
-        ("slack", "Slack"),
-        ("chatgpt", "ChatGPT"),
-        ("claude", "Claude"),
-    ]
-
-    init() {
-        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        appSupportDir = base.appendingPathComponent("mac-dualsense", isDirectory: true)
-        configURL = appSupportDir.appendingPathComponent("mappings.yaml", isDirectory: false)
-
+    init(configURL: URL? = nil, appFocus: AppFocus? = nil, watch: Bool = true, automaticallySaves: Bool = true) {
+        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        self.configURL = configURL ?? base.appendingPathComponent("mac-dualsense/mappings.yaml")
+        appSupportDir = self.configURL.deletingLastPathComponent()
+        self.appFocus = appFocus ?? AppFocus(cacheTTLms: 100)
+        self.automaticallySaves = automaticallySaves
         loadOrSeed()
-        startWatchingConfig()
+        if watch { startWatchingConfig() }
+    }
+
+    isolated deinit {
+        configWatcher?.cancel()
+        fileWatcher?.cancel()
+        pendingSave?.cancel()
+        pendingReload?.cancel()
     }
 
     var configFileURL: URL { configURL }
@@ -77,10 +79,17 @@ final class ConfigStore: ObservableObject {
         do {
             let yaml = try String(contentsOf: configURL, encoding: .utf8)
             let decoder = YAMLDecoder()
-            config = try decoder.decode(Config.self, from: yaml)
+            let loaded = try decoder.decode(Config.self, from: yaml)
+            try AppContext.validate(loaded.contexts ?? AppContext.defaults)
+            pendingSave?.cancel()
+            onRoutingChange?()
+            config = loaded
             normalize()
+            appFocus.contexts = contexts
             appFocus.cacheTTLms = config.settings.appFocusCacheTtlMs ?? 100
+            onControllerPreferenceChange?()
             lastLoadError = nil
+            lastSaveError = nil
             lastLoadedAt = Date()
             Logger.shared.info("Reloaded config from \(configURL.path)")
         } catch {
@@ -91,9 +100,14 @@ final class ConfigStore: ObservableObject {
     }
 
     func save() {
+        guard lastLoadError == nil else {
+            lastSaveError = "Fix the configuration error and reload before saving. Your file has been preserved."
+            return
+        }
         do {
             pendingSave?.cancel()
             pendingSave = nil
+            config.contexts = contexts
             let encoder = YAMLEncoder()
             let yaml = try encoder.encode(config)
             try yaml.write(to: configURL, atomically: true, encoding: .utf8)
@@ -107,6 +121,7 @@ final class ConfigStore: ObservableObject {
     }
 
     func autosave(after delaySeconds: TimeInterval = 0.25) {
+        guard automaticallySaves else { return }
         pendingSave?.cancel()
         let work = DispatchWorkItem { [weak self] in
             MainActor.assumeIsolated {
@@ -135,6 +150,45 @@ final class ConfigStore: ObservableObject {
         return profile.mappings["default"]?[button]
     }
 
+    var contexts: [String: AppContext] { config.contexts ?? AppContext.defaults }
+
+    var allContextIDs: [String] {
+        let mappings = config.profiles.items.values.flatMap { $0.mappings.keys }
+        return Set(contexts.keys).union(mappings).subtracting(["default"]).sorted()
+    }
+
+    func setContext(id: String, name: String, bundleIDs: [String]) throws {
+        var updated = contexts
+        updated[id] = AppContext(name: name.trimmingCharacters(in: .whitespacesAndNewlines), bundleIDs: bundleIDs)
+        try AppContext.validate(updated)
+        onRoutingChange?()
+        config.contexts = updated
+        appFocus.contexts = updated
+        autosave()
+    }
+
+    func removeAssociations(context id: String) {
+        guard var context = contexts[id] else { return }
+        context.bundleIDs = []
+        config.contexts = contexts
+        config.contexts?[id] = context
+        onRoutingChange?()
+        appFocus.contexts = contexts
+        autosave()
+    }
+
+    func updateSettings(_ update: (inout Settings) -> Void) {
+        onRoutingChange?()
+        update(&config.settings)
+        autosave()
+    }
+
+    func setHapticsEnabled(_ enabled: Bool) {
+        config.haptics = config.haptics ?? .init()
+        config.haptics?.enabled = enabled
+        autosave()
+    }
+
     func profileNames() -> [String] {
         Array(config.profiles.items.keys).sorted()
     }
@@ -145,6 +199,7 @@ final class ConfigStore: ObservableObject {
 
     func setActiveProfile(_ name: String) {
         guard config.profiles.items[name] != nil else { return }
+        onRoutingChange?()
         config.profiles.active = name
         autosave()
     }
@@ -155,8 +210,7 @@ final class ConfigStore: ObservableObject {
         guard config.profiles.items[trimmed] == nil else { throw StoreError.alreadyExists }
 
         let sourceName = cloneFrom ?? config.profiles.active
-        let sourceMappings = config.profiles.items[sourceName]?.mappings ?? ["default": [:]]
-        config.profiles.items[trimmed] = ProfileItem(mappings: sourceMappings)
+        config.profiles.items[trimmed] = config.profiles.items[sourceName] ?? ProfileItem()
         autosave()
     }
 
@@ -170,7 +224,7 @@ final class ConfigStore: ObservableObject {
             candidate = "\(base) \(n)"
             n += 1
         }
-        config.profiles.items[candidate] = ProfileItem(mappings: src.mappings)
+        config.profiles.items[candidate] = src
         autosave()
         return candidate
     }
@@ -181,6 +235,7 @@ final class ConfigStore: ObservableObject {
         guard config.profiles.items[old] != nil else { throw StoreError.notFound }
         guard config.profiles.items[trimmed] == nil else { throw StoreError.alreadyExists }
 
+        onRoutingChange?()
         config.profiles.items[trimmed] = config.profiles.items.removeValue(forKey: old)
         if config.profiles.active == old {
             config.profiles.active = trimmed
@@ -191,6 +246,7 @@ final class ConfigStore: ObservableObject {
     func deleteProfile(_ name: String) throws {
         guard config.profiles.items[name] != nil else { return }
         guard config.profiles.items.count > 1 else { throw StoreError.cannotDeleteLast }
+        onRoutingChange?()
         config.profiles.items.removeValue(forKey: name)
         if config.profiles.active == name {
             config.profiles.active = profileNames().first ?? "default"
@@ -199,7 +255,7 @@ final class ConfigStore: ObservableObject {
     }
 
     func contextKeys(forProfile profile: String) -> [String] {
-        let base = Set(Self.knownContexts.map { $0.key })
+        let base = Set(contexts.keys)
         let existingKeys = config.profiles.items[profile]?.mappings.keys.map { $0 } ?? []
         let existing = Set(existingKeys)
         var all = base.union(existing)
@@ -208,9 +264,7 @@ final class ConfigStore: ObservableObject {
     }
 
     func contextLabel(_ context: String) -> String {
-        if let match = Self.knownContexts.first(where: { $0.key == context }) {
-            return match.label
-        }
+        if let match = contexts[context] { return match.name }
         if context == "default" { return "Global" }
         return context.replacingOccurrences(of: "_", with: " ").capitalized
     }
@@ -227,6 +281,7 @@ final class ConfigStore: ObservableObject {
     func setAction(profile: String, context: String, button: String, action: ActionDef) {
         guard !button.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
 
+        onRoutingChange?()
         var profileItem = config.profiles.items[profile] ?? ProfileItem()
         var ctx = profileItem.mappings[context] ?? [:]
         ctx[button] = action
@@ -237,6 +292,7 @@ final class ConfigStore: ObservableObject {
 
     func deleteAction(profile: String, context: String, button: String) {
         guard var profileItem = config.profiles.items[profile] else { return }
+        onRoutingChange?()
         var ctx = profileItem.mappings[context] ?? [:]
         ctx.removeValue(forKey: button)
         if ctx.isEmpty {
@@ -282,6 +338,7 @@ final class ConfigStore: ObservableObject {
         let norm = value.lowercased()
         config.settings.controller = config.settings.controller ?? .init()
         config.settings.controller?.preferred = ["auto", "dualsense", "pro_controller"].contains(norm) ? norm : "auto"
+        onControllerPreferenceChange?()
         autosave()
     }
 
@@ -302,6 +359,7 @@ final class ConfigStore: ObservableObject {
     }
 
     func setTrackpadMode(profile: String, enabled: Bool) {
+        onRoutingChange?()
         var profileItem = config.profiles.items[profile] ?? ProfileItem()
         profileItem.trackpadMode = enabled ? true : nil
         config.profiles.items[profile] = profileItem
@@ -350,6 +408,20 @@ final class ConfigStore: ObservableObject {
 
         configWatcher = watcher
         watcher.resume()
+        watchConfigFile()
+    }
+
+    private func watchConfigFile() {
+        fileWatcher?.cancel()
+        let fd = open(configURL.path, O_EVTONLY)
+        guard fd >= 0 else { return }
+        let watcher = DispatchSource.makeFileSystemObjectSource(fileDescriptor: fd, eventMask: [.write, .rename, .delete], queue: .main)
+        watcher.setEventHandler { [weak self] in
+            MainActor.assumeIsolated { self?.scheduleReloadFromDisk() }
+        }
+        watcher.setCancelHandler { close(fd) }
+        fileWatcher = watcher
+        watcher.resume()
     }
 
     private func scheduleReloadFromDisk(after delaySeconds: TimeInterval = 0.15) {
@@ -357,6 +429,7 @@ final class ConfigStore: ObservableObject {
         let work = DispatchWorkItem { [weak self] in
             MainActor.assumeIsolated {
                 self?.reload()
+                self?.watchConfigFile()
             }
         }
         pendingReload = work

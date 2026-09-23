@@ -1,11 +1,24 @@
 import Foundation
 
 struct Config: Codable {
+    var contexts: [String: AppContext]? = nil
     var version: Int = 2
     var settings: Settings = .init()
     var profiles: Profiles = .init()
     var mappings: [String: [String: ActionDef]]? = nil // legacy (pre-profiles)
     var haptics: Haptics? = nil
+
+    init() {}
+
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        version = try values.decodeIfPresent(Int.self, forKey: .version) ?? 2
+        settings = try values.decodeIfPresent(Settings.self, forKey: .settings) ?? .init()
+        profiles = try values.decodeIfPresent(Profiles.self, forKey: .profiles) ?? .init()
+        mappings = try values.decodeIfPresent([String: [String: ActionDef]].self, forKey: .mappings)
+        haptics = try values.decodeIfPresent(Haptics.self, forKey: .haptics)
+        contexts = try values.decodeIfPresent([String: AppContext].self, forKey: .contexts)
+    }
 }
 
 struct Settings: Codable {
@@ -87,5 +100,57 @@ struct CCHapticPattern: Codable, Hashable {
         case intensity
         case durationMs = "duration_ms"
         case repeatCount = "repeat"
+    }
+}
+
+struct AppContext: Codable, Equatable {
+    var name: String
+    var bundleIDs: [String]
+
+    enum CodingKeys: String, CodingKey {
+        case name
+        case bundleIDs = "bundle_ids"
+    }
+
+    static let defaults: [String: AppContext] = [
+        "warp": .init(name: "Warp", bundleIDs: ["dev.warp.Warp-Stable", "dev.warp.Warp"]),
+        "arc": .init(name: "Arc", bundleIDs: ["company.thebrowser.Browser"]),
+        "chrome": .init(name: "Chrome", bundleIDs: ["com.google.Chrome"]),
+        "slack": .init(name: "Slack", bundleIDs: ["com.tinyspeck.slackmacgap"]),
+        "chatgpt": .init(name: "ChatGPT", bundleIDs: ["com.openai.chat"]),
+        "claude": .init(name: "Claude", bundleIDs: ["com.anthropic.claudefordesktop"]),
+    ]
+
+    static func validate(_ contexts: [String: AppContext]) throws {
+        var assigned = Set<String>()
+        for (id, context) in contexts {
+            guard id != "default", !id.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                  !context.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                throw ContextError.invalidName
+            }
+            for bundleID in context.bundleIDs {
+                guard bundleID.contains("."), !bundleID.contains(where: { $0.isWhitespace }),
+                      !bundleID.hasPrefix("."), !bundleID.hasSuffix(".") else {
+                    throw ContextError.invalidBundleID(bundleID)
+                }
+                guard assigned.insert(bundleID).inserted else {
+                    throw ContextError.duplicateBundleID(bundleID)
+                }
+            }
+        }
+    }
+}
+
+enum ContextError: LocalizedError {
+    case invalidName
+    case invalidBundleID(String)
+    case duplicateBundleID(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidName: "Give the app context a name. Global is reserved."
+        case .invalidBundleID(let id): "Invalid bundle ID: \(id)"
+        case .duplicateBundleID(let id): "\(id) is already assigned to an app context."
+        }
     }
 }

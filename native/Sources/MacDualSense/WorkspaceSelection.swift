@@ -1,8 +1,10 @@
 import Foundation
+import SwiftUI
 
 enum WorkspaceSection: String, CaseIterable, Hashable, Identifiable {
     case controller
     case keybinds
+    case apps
     case profiles
     case diagnostics
 
@@ -14,6 +16,7 @@ enum WorkspaceSection: String, CaseIterable, Hashable, Identifiable {
             return "Controller"
         case .keybinds:
             return "Keybinds"
+        case .apps: return "Apps"
         case .profiles:
             return "Profiles"
         case .diagnostics:
@@ -27,6 +30,7 @@ enum WorkspaceSection: String, CaseIterable, Hashable, Identifiable {
             return "gamecontroller"
         case .keybinds:
             return "keyboard"
+        case .apps: return "app.connected.to.app.below.fill"
         case .profiles:
             return "square.stack.3d.up"
         case .diagnostics:
@@ -40,6 +44,7 @@ enum WorkspaceSection: String, CaseIterable, Hashable, Identifiable {
             return "Live routing and visual editor"
         case .keybinds:
             return "Profiles, contexts, and mappings"
+        case .apps: return "Choose where mappings apply"
         case .profiles:
             return "Manage mapping sets"
         case .diagnostics:
@@ -50,12 +55,13 @@ enum WorkspaceSection: String, CaseIterable, Hashable, Identifiable {
 
 @MainActor
 final class WorkspaceSelection: ObservableObject {
+    private let defaults: UserDefaults
     private static let sectionDefaultsKey = "workspace.section"
     private static let contextDefaultsKey = "workspace.context"
 
     @Published var section: WorkspaceSection {
         didSet {
-            UserDefaults.standard.set(section.rawValue, forKey: Self.sectionDefaultsKey)
+            defaults.set(section.rawValue, forKey: Self.sectionDefaultsKey)
             if section != .controller {
                 isLearningButton = false
             }
@@ -69,7 +75,7 @@ final class WorkspaceSelection: ObservableObject {
                 editedContext = normalized
                 return
             }
-            UserDefaults.standard.set(normalized, forKey: Self.contextDefaultsKey)
+            defaults.set(normalized, forKey: Self.contextDefaultsKey)
             hasPersistedContext = true
             selectedButton = nil
             isLearningButton = false
@@ -77,12 +83,20 @@ final class WorkspaceSelection: ObservableObject {
     }
 
     @Published var selectedButton: String? = nil
-    @Published var isLearningButton: Bool = false
+    #if DEBUG
+    @Published var previewColorScheme: ColorScheme?
+    #endif
+    var onCaptureChange: (() -> Void)?
+    @Published var isLearningButton = false { didSet { onCaptureChange?() } }
+    @Published var isRecordingShortcut = false { didSet { onCaptureChange?() } }
+    @Published var isTestingInput = false { didSet { onCaptureChange?() } }
+    @Published var inspectorVisible = false
+    var isCapturingInput: Bool { isLearningButton || isRecordingShortcut || isTestingInput }
 
     private var hasPersistedContext: Bool
 
-    init() {
-        let defaults = UserDefaults.standard
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
         let sectionRaw = defaults.string(forKey: Self.sectionDefaultsKey) ?? WorkspaceSection.controller.rawValue
         section = WorkspaceSection(rawValue: sectionRaw) ?? .controller
 

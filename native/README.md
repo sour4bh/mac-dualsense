@@ -1,25 +1,15 @@
-# mac-dualsense (Native Swift implementation)
+# Native app
 
-This folder contains the native SwiftUI + GameController implementation intended for easier distribution (no Homebrew `hidapi` dependency).
+SwiftUI + GameController, built with SwiftPM. Requires Apple Silicon, macOS 26+, and Xcode 26+ / Swift 6.2+.
 
-## Build & Run
+From the repository root:
 
-- Build (debug): `swift build --package-path native`
-- Run from Xcode: open `native/Package.swift` in Xcode and press Run, or run the built binary from `native/.build/.../debug/MacDualSense`.
+```sh
+make test
+make run
+make verify
+```
 
-## Create a `.app` and Install
+Builds create `native/dist/mac-dualsense.app`. Source builds are ad-hoc signed. `make install` installs without launching; `make run` builds and opens the local development app.
 
-- Build an app bundle: `native/scripts/build_app.sh`
-- Install to `/Applications` and launch: `native/scripts/install_app.sh`
-
-## Configuration
-
-- User config path: `~/Library/Application Support/mac-dualsense/mappings.yaml`
-- First run will seed the file from `native/Sources/MacDualSense/Resources/mappings.yaml` if missing.
-  - Includes per-app contexts (Warp/Arc/Chrome/Slack/ChatGPT/Claude) and haptics patterns.
-
-## Permissions
-
-mac-dualsense injects keystrokes via `CGEvent` and requires:
-
-- System Settings → Privacy & Security → Accessibility → enable **mac-dualsense**
+See [contributing](../CONTRIBUTING.md), [configuration](../docs/configuration.md), and [signed release setup](../docs/releasing.md).

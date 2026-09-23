@@ -27,6 +27,7 @@ let package = Package(
                 .linkedFramework("ApplicationServices"),
                 .linkedFramework("Carbon"),
             ]
-        )
+        ),
+        .testTarget(name: "MacDualSenseTests", dependencies: ["MacDualSense", "Yams"])
     ]
 )

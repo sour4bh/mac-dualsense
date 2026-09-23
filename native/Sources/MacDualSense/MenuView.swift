@@ -79,6 +79,8 @@ struct MenuView: View {
                         }
                     }
 
+                    SettingsLink { Label("Settings…", systemImage: "gearshape") }
+
                     Divider()
 
                     Button("Quit") {
@@ -103,9 +105,7 @@ struct MenuView: View {
 
     private func openWorkspace() {
         NSApp.activate(ignoringOtherApps: true)
-        Task {
-            try? await openWindow(id: WorkspaceRootView.windowID, sharingBehavior: .required)
-        }
+        openWindow(id: WorkspaceRootView.windowID)
     }
 }
 

@@ -1,0 +1,38 @@
+name: CI
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  validate:
+    runs-on: macos-26
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Toolchain
+        run: swift --version && xcodebuild -version
+      - name: Test
+        run: swift test --package-path native --disable-automatic-resolution
+      - name: Build and verify app
+        run: make verify
+      - name: Check documentation links
+        run: python script/check_docs.py
+      - name: Check scripts and diff
+        run: |
+          for script in native/scripts/*.sh script/*.sh; do bash -n "$script"; done
+          git diff --check
+      - name: Archive development app
+        run: ditto -c -k --keepParent native/dist/mac-dualsense.app native/dist/mac-dualsense-development.zip
+      - name: Upload local-development app
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: mac-dualsense-development-arm64
+          path: native/dist/mac-dualsense-development.zip
+          retention-days: 7

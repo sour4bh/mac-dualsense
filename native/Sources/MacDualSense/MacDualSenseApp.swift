@@ -5,19 +5,28 @@ import SwiftUI
 struct MacDualSenseApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
-    @StateObject private var appState = AppState()
+    @StateObject private var appState = AppState.forLaunch()
     @AppStorage("workspace.has-seen-launch") private var hasSeenWorkspaceLaunch = false
 
     var body: some Scene {
-        MenuBarExtra("mac-dualsense", systemImage: "gamecontroller") {
+        workspaceWindow
+            .commands { MacDualSenseCommands(appState: appState) }
+
+        SwiftUI.Settings { SettingsView(store: appState.configStore) }
+
+        MenuBarExtra {
             MenuView(appState: appState)
+        } label: {
+            MenuBarLabel(showWorkspace: shouldShowWorkspace)
         }
         .menuBarExtraStyle(.window)
+    }
 
-        workspaceWindow
-            .commands {
-                MacDualSenseCommands(appState: appState)
-            }
+    private var shouldShowWorkspace: Bool {
+        #if DEBUG
+        if DemoCapture.outputDirectory != nil { return true }
+        #endif
+        return !hasSeenWorkspaceLaunch
     }
 
     private var workspaceWindow: some Scene {
@@ -26,15 +35,22 @@ struct MacDualSenseApp: App {
                 hasSeenWorkspaceLaunch = true
             }
         }
-        .defaultSize(width: 1280, height: 800)
-        .defaultLaunchBehavior(hasSeenWorkspaceLaunch ? .suppressed : .automatic)
+        .defaultSize(width: 1200, height: 780)
+        .defaultLaunchBehavior(shouldShowWorkspace ? .automatic : .suppressed)
         .windowResizability(.contentMinSize)
     }
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
-        NSApp.setActivationPolicy(.accessory)
+        let firstLaunch = !UserDefaults.standard.bool(forKey: "workspace.has-seen-launch")
+        #if DEBUG
+        let opensWorkspace = firstLaunch || DemoCapture.outputDirectory != nil
+        #else
+        let opensWorkspace = firstLaunch
+        #endif
+        NSApp.setActivationPolicy(opensWorkspace ? .regular : .accessory)
+        if opensWorkspace { NSApp.activate(ignoringOtherApps: true) }
     }
 }
 
@@ -44,11 +60,9 @@ private struct MacDualSenseCommands: Commands {
     @Environment(\.openWindow) private var openWindow
 
     var body: some Commands {
-        CommandGroup(replacing: .appSettings) {
-            Button("Open mac-dualsense…") {
-                openWorkspace()
-            }
-            .keyboardShortcut(",", modifiers: [.command])
+        CommandGroup(after: .appSettings) {
+            Button("Open mac-dualsense…") { openWorkspace() }
+                .keyboardShortcut("o", modifiers: [.command])
         }
 
         CommandMenu("Controller") {
@@ -76,8 +90,22 @@ private struct MacDualSenseCommands: Commands {
 
     private func openWorkspace() {
         NSApp.activate(ignoringOtherApps: true)
-        Task {
-            try? await openWindow(id: WorkspaceRootView.windowID, sharingBehavior: .required)
-        }
+        openWindow(id: WorkspaceRootView.windowID)
+    }
+}
+
+private struct MenuBarLabel: View {
+    let showWorkspace: Bool
+    @Environment(\.openWindow) private var openWindow
+    @State private var opened = false
+
+    var body: some View {
+        Image(systemName: "gamecontroller")
+            .accessibilityLabel("mac-dualsense")
+            .onAppear {
+                guard showWorkspace, !opened else { return }
+                opened = true
+                openWindow(id: WorkspaceRootView.windowID)
+            }
     }
 }
