@@ -15,6 +15,8 @@ The implementation task records CI results in its PR. CI must pass on the final 
 
 ## Manual checks before publishing
 
+- [ ] Document the original source, author, and redistribution terms for the existing controller SVGs.
+
 - [ ] First launch on a fresh macOS user account: setup, permission denial, granting permission, and returning from System Settings.
 - [ ] Launch after setup: menu bar only; reopen the editor; close it without stopping mappings; quit cleanly.
 - [ ] Keyboard-only navigation and VoiceOver: sidebar, controller actions, binding recording, profiles, Apps, and Settings.

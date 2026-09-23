@@ -9,6 +9,8 @@ struct DualSenseBackButtonProvider: ControllerButtonProvider {
     }
 
     // Back view shows L1, L2, R1, R2 from behind the controller
+    // Coordinates are in the back SVG space (viewBox: 55, 450, 590, 305)
+    // The SVG uses transform="translate(0, 1205) scale(1, -1)" which flips Y.
     private static let buttonDefinitions: [String: ControllerButton] = {
         var buttons: [String: ControllerButton] = [:]
 
